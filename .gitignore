@@ -39,12 +39,3 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# heavy media, leveldb cache & binary blobs
-*.sst
-*.blob
-*.mp4
-*.MOV
-*.mov
-*.zip
-*.tar.gz
-public/vdo/
