@@ -56,90 +56,103 @@ export default function AICopilot({ isOpen, onClose }: { isOpen: boolean; onClos
   };
 
   return (
-    <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-[420px] bg-white border-l border-slate-200 shadow-2xl flex flex-col font-sans text-slate-800 animate-in slide-in-from-right duration-200">
-      <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-emerald-600 flex items-center justify-center text-white text-xs font-bold">
-            ✨
-          </div>
-          <div>
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide">AI Copilot</h3>
-            <p className="text-[10px] text-slate-500">Business Intelligence & Project Insights</p>
-          </div>
-        </div>
-        <button
-          onClick={onClose}
-          className="text-slate-400 hover:text-slate-600 text-sm p-1 rounded-lg hover:bg-slate-200/50 cursor-pointer"
-        >
-          ✕
-        </button>
-      </div>
+    <>
+      {/* Background Dim Backdrop */}
+      <div 
+        onClick={onClose} 
+        className="fixed inset-0 bg-black/40 backdrop-blur-xs z-[9998] transition-opacity duration-200" 
+      />
 
-      <div className="p-3 border-b border-slate-100 bg-emerald-50/30 flex gap-2 overflow-x-auto text-[11px]">
-        <button
-          onClick={() => handleAsk('Which projects are currently at risk?')}
-          className="px-2.5 py-1 rounded-full bg-white border border-emerald-200 text-emerald-800 font-medium shrink-0 hover:bg-emerald-50 cursor-pointer"
-        >
-          ⚠️ At-risk projects?
-        </button>
-        <button
-          onClick={() => handleAsk('Show revenue and financial summary')}
-          className="px-2.5 py-1 rounded-full bg-white border border-emerald-200 text-emerald-800 font-medium shrink-0 hover:bg-emerald-50 cursor-pointer"
-        >
-          💰 Revenue summary?
-        </button>
-        <button
-          onClick={() => handleAsk('Summarize workspace health')}
-          className="px-2.5 py-1 rounded-full bg-white border border-emerald-200 text-emerald-800 font-medium shrink-0 hover:bg-emerald-50 cursor-pointer"
-        >
-          📊 Workspace health
-        </button>
-      </div>
-
-      <div className="flex-1 p-4 overflow-y-auto space-y-3">
-        {messages.map((m, idx) => (
-          <div
-            key={idx}
-            className={`p-3 rounded-2xl text-xs space-y-1 ${
-              m.role === 'assistant'
-                ? 'bg-slate-100 text-slate-800 border border-slate-200/70'
-                : 'bg-emerald-600 text-white ml-8 shadow-xs'
-            }`}
+      {/* Slide-in Drawer Container */}
+      <div className="fixed inset-y-0 right-0 z-[9999] w-full sm:w-[420px] bg-white border-l border-slate-200 shadow-2xl flex flex-col font-sans text-slate-800 animate-in slide-in-from-right duration-200">
+        <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-emerald-600 flex items-center justify-center text-white text-xs font-bold">
+              ✨
+            </div>
+            <div>
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wide">AI Copilot</h3>
+              <p className="text-[10px] text-slate-500">Business Intelligence & Project Insights</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600 text-sm p-1 rounded-lg hover:bg-slate-200/50 cursor-pointer"
           >
-            <span className="font-bold text-[10px] uppercase block tracking-wider opacity-70">
-              {m.role === 'assistant' ? 'Copilot AI' : 'You'}
-            </span>
-            <p className="whitespace-pre-line leading-relaxed">{m.text}</p>
-          </div>
-        ))}
-        {thinking && (
-          <div className="p-3 rounded-2xl bg-slate-100 text-xs text-slate-500 animate-pulse">
-            Analyzing company workspace data...
-          </div>
-        )}
-      </div>
+            ✕
+          </button>
+        </div>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleAsk();
-        }}
-        className="p-3.5 border-t border-slate-200 bg-slate-50 flex gap-2"
-      >
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Ask Copilot anything about projects, finances..."
-          className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
-        />
-        <button
-          type="submit"
-          className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer"
+        <div className="p-3 border-b border-slate-100 bg-emerald-50/30 flex gap-2 overflow-x-auto text-[11px]">
+          <button
+            type="button"
+            onClick={() => handleAsk('Which projects are currently at risk?')}
+            className="px-2.5 py-1 rounded-full bg-white border border-emerald-200 text-emerald-800 font-medium shrink-0 hover:bg-emerald-50 cursor-pointer"
+          >
+            ⚠️ At-risk projects?
+          </button>
+          <button
+            type="button"
+            onClick={() => handleAsk('Show revenue and financial summary')}
+            className="px-2.5 py-1 rounded-full bg-white border border-emerald-200 text-emerald-800 font-medium shrink-0 hover:bg-emerald-50 cursor-pointer"
+          >
+            💰 Revenue summary?
+          </button>
+          <button
+            type="button"
+            onClick={() => handleAsk('Summarize workspace health')}
+            className="px-2.5 py-1 rounded-full bg-white border border-emerald-200 text-emerald-800 font-medium shrink-0 hover:bg-emerald-50 cursor-pointer"
+          >
+            📊 Workspace health
+          </button>
+        </div>
+
+        <div className="flex-1 p-4 overflow-y-auto space-y-3">
+          {messages.map((m, idx) => (
+            <div
+              key={idx}
+              className={`p-3 rounded-2xl text-xs space-y-1 ${
+                m.role === 'assistant'
+                  ? 'bg-slate-100 text-slate-800 border border-slate-200/70'
+                  : 'bg-emerald-600 text-white ml-8 shadow-xs'
+              }`}
+            >
+              <span className="font-bold text-[10px] uppercase block tracking-wider opacity-70">
+                {m.role === 'assistant' ? 'Copilot AI' : 'You'}
+              </span>
+              <p className="whitespace-pre-line leading-relaxed">{m.text}</p>
+            </div>
+          ))}
+          {thinking && (
+            <div className="p-3 rounded-2xl bg-slate-100 text-xs text-slate-500 animate-pulse">
+              Analyzing company workspace data...
+            </div>
+          )}
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleAsk();
+          }}
+          className="p-3.5 border-t border-slate-200 bg-slate-50 flex gap-2"
         >
-          Ask
-        </button>
-      </form>
-    </div>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Ask Copilot anything about projects, finances..."
+            className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
+          />
+          <button
+            type="submit"
+            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer"
+          >
+            Ask
+          </button>
+        </form>
+      </div>
+    </>
   );
 }
