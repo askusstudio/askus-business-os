@@ -1,122 +1,101 @@
 'use client'
 import React, { useRef, useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
-const SingleReelCard = ({ videoUrl }: { videoUrl: string }) => {
+interface ReelProps {
+  url: string;
+}
+
+const ReelItem = React.forwardRef<HTMLDivElement, ReelProps>(({ url }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [indicator, setIndicator] = useState<'play' | 'pause' | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  // Performance Fix: Sirf tabhi play hoga jab screen ke viewport me aaye
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            videoRef.current?.play().then(() => setIsPlaying(true)).catch(() => {});
-          } else {
-            videoRef.current?.pause();
-            setIsPlaying(false);
-          }
-        });
-      },
-      { threshold: 0.5 }
-    );
+    const video = videoRef.current;
+    if (!video) return;
 
-    if (containerRef.current) {
-      observer.observe(containerRef.current);
-    }
+    video.muted = true;
+    video.defaultMuted = true;
+    video.playsInline = true;
 
-    return () => observer.disconnect();
-  }, []);
+    const tryPlay = () => {
+      video.play().catch(() => {});
+    };
 
-  const handleCardClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!videoRef.current) return;
-
-    if (videoRef.current.paused) {
-      videoRef.current.play();
-      videoRef.current.muted = false; // tap karne par audio
-      setIsPlaying(true);
-      setIndicator('play');
+    if (video.readyState >= 2) {
+      tryPlay();
     } else {
-      videoRef.current.pause();
-      setIsPlaying(false);
-      setIndicator('pause');
+      video.addEventListener('loadeddata', tryPlay, { once: true });
     }
+  }, [url]);
 
-    setTimeout(() => {
-      setIndicator(null);
-    }, 600);
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const vid = videoRef.current;
+    if (!vid) return;
+
+    if (vid.paused) {
+      vid.muted = false;
+      vid.play().catch(() => {});
+    } else {
+      vid.pause();
+    }
   };
 
   return (
     <div
-      ref={containerRef}
-      onClick={handleCardClick}
-      className="flex-shrink-0 w-[190px] sm:w-[220px] md:w-[260px] aspect-[9/16] bg-neutral-900 rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 relative group cursor-pointer border border-black/5"
+      ref={ref}
+      onClick={handleToggle}
+      className="flex-shrink-0 w-[190px] sm:w-[220px] md:w-[260px] aspect-[9/16] bg-neutral-900 rounded-2xl md:rounded-3xl overflow-hidden shadow-xl hover:shadow-2xl transition-transform duration-75 ease-out relative cursor-pointer border border-black/5"
       style={{ willChange: 'transform' }}
     >
+      <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/10 z-10 pointer-events-none" />
+
       <video
         ref={videoRef}
-        src={videoUrl}
+        src={url}
         muted
         loop
         playsInline
-        preload="metadata" // POORI VIDEO LOAD NAHI KAREGA, CRASH ROOK DEGA
-        className="w-full h-full object-cover pointer-events-none"
+        preload="auto"
+        onCanPlay={() => setIsLoaded(true)}
+        className={`w-full h-full object-cover pointer-events-none transition-opacity duration-300 ${
+          isLoaded ? 'opacity-100' : 'opacity-80'
+        }`}
       />
-
-      {/* Quick feedback indicator on tap */}
-      <AnimatePresence>
-        {indicator && (
-          <motion.div
-            initial={{ scale: 0.7, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 1.2, opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            className="absolute inset-0 flex items-center justify-center pointer-events-none z-20"
-          >
-            <div className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-md text-white flex items-center justify-center font-bold text-lg border border-white/20 shadow-2xl">
-              {indicator === 'play' ? '▶' : '❚❚'}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
-};
+});
+
+ReelItem.displayName = 'ReelItem';
 
 const VideoReel = () => {
   const supabaseBase = "https://xaxnevroftdfyquhocvj.supabase.co/storage/v1/object/public/videos";
 
-  const videoFiles = [
-    "AskUs_Work Portfolio (9).mp4",
-    "bolin.mp4",
-    "CMY.MP4",
-    "CR 1 mrugg v5.mp4",
-    "Dusk Hanging_1.mp4",
-    "mrugg v2(2).mp4",
-    "Stanley Iceflow_4.mp4",
-    "sv12.mp4",
-    "v1.mp4",
-    "v2.mp4"
+  const safeList = [
+    `${supabaseBase}/sv12.mp4`,
+    `${supabaseBase}/CMY.MP4`,
+    `${supabaseBase}/bolin.mp4`,
+    `${supabaseBase}/v1.mp4`,
+    `${supabaseBase}/v2.mp4`,
+    `${supabaseBase}/Stanley%20Iceflow_4.mp4`,
+    `${supabaseBase}/Dusk%20Hanging_1.mp4`,
+    `${supabaseBase}/CR%201%20mrugg%20v5.mp4`
   ];
 
-  const videos = videoFiles.map(file => `${supabaseBase}/${encodeURIComponent(file)}`);
+  const reelVideos = [...safeList, ...safeList];
 
   const trackRef = useRef<HTMLDivElement>(null);
-  const isHoveredRef = useRef(false);
+  const itemsRef = useRef<(HTMLDivElement | null)[]>([]);
+  const isInteractingRef = useRef(false);
 
   useEffect(() => {
     let animationFrameId: number;
     let xPos = 0;
-    // Marquee scrolling speed smooth & low CPU
-    const speed = 0.7;
+    const speed = window.innerWidth < 640 ? 0.8 : 1.2;
 
     const animate = () => {
-      if (trackRef.current && !isHoveredRef.current) {
+      if (trackRef.current && !isInteractingRef.current) {
         xPos -= speed;
 
         const firstChild = trackRef.current.children[0] as HTMLElement;
@@ -125,14 +104,32 @@ const VideoReel = () => {
         if (firstChild && secondChild) {
           const itemW = firstChild.offsetWidth;
           const gapW = secondChild.offsetLeft - (firstChild.offsetLeft + itemW);
-          const totalSetWidth = (itemW + gapW) * videos.length;
+          const totalSetWidth = (itemW + gapW) * safeList.length;
 
           if (Math.abs(xPos) >= totalSetWidth) {
-            xPos = 0;
+            xPos += totalSetWidth;
           }
         }
 
-        trackRef.current.style.transform = `translate3d(${xPos}px, 0, 0)`; // GPU Acceleration
+        trackRef.current.style.transform = `translate3d(${xPos}px, 0, 0)`;
+
+        // Center zoom calculation
+        const centerX = window.innerWidth / 2;
+        const maxDist = window.innerWidth / 2;
+
+        itemsRef.current.forEach((item) => {
+          if (!item) return;
+          const rect = item.getBoundingClientRect();
+          const itemCenterX = rect.left + rect.width / 2;
+          const distance = Math.abs(centerX - itemCenterX);
+
+          const normalized = Math.max(0, 1 - distance / maxDist);
+          const scale = 0.88 + normalized * 0.3; // 0.88x to 1.18x zoom
+          const zIndex = Math.round(normalized * 25);
+
+          item.style.transform = `scale(${scale})`;
+          item.style.zIndex = zIndex.toString();
+        });
       }
 
       animationFrameId = requestAnimationFrame(animate);
@@ -140,40 +137,45 @@ const VideoReel = () => {
 
     animationFrameId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animationFrameId);
-  }, [videos.length]);
+  }, [safeList.length]);
 
   return (
-    <section className="relative py-16 sm:py-20 bg-white overflow-hidden flex flex-col items-center justify-center border-t border-slate-100 font-sans">
+    <section className="relative pt-12 pb-24 sm:pt-16 sm:pb-32 bg-white overflow-hidden flex flex-col items-center justify-center border-t border-neutral-100 select-none font-sans">
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 25 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
         transition={{ duration: 0.5 }}
-        className="text-center mb-8 sm:mb-12 relative z-10 w-full px-4 space-y-2"
+        className="text-center mb-8 sm:mb-12 relative z-20 w-full px-4"
       >
-        <span className="text-[11px] font-mono font-bold tracking-widest text-slate-400 uppercase">
-          OUR BEST WORK
+        <span className="text-xs sm:text-sm font-semibold text-black/60 uppercase tracking-[0.2em] mb-2 block">
+          Our Best Work
         </span>
-        <h3 className="text-3xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-tight">
-          Video Production & Reels
+        <h3 className="text-3xl sm:text-4xl md:text-5xl font-black text-black tracking-tight lowercase">
+          video production
         </h3>
       </motion.div>
 
       <div
-        className="relative w-full flex items-center justify-start overflow-hidden py-2"
-        onMouseEnter={() => { isHoveredRef.current = true; }}
-        onMouseLeave={() => { isHoveredRef.current = false; }}
-        onTouchStart={() => { isHoveredRef.current = true; }}
-        onTouchEnd={() => { isHoveredRef.current = false; }}
+        className="relative w-full flex items-center justify-start overflow-hidden py-10"
+        onMouseEnter={() => { isInteractingRef.current = true; }}
+        onMouseLeave={() => { isInteractingRef.current = false; }}
+        onTouchStart={() => { isInteractingRef.current = true; }}
+        onTouchEnd={() => { isInteractingRef.current = false; }}
       >
         <div
           ref={trackRef}
-          className="flex gap-4 sm:gap-6 w-max items-center pl-4"
+          className="flex gap-5 sm:gap-7 md:gap-9 w-max items-center pl-4"
           style={{ willChange: 'transform' }}
         >
-          {/* Doubled once for loop, not tripled */}
-          {[...videos, ...videos].map((videoUrl, idx) => (
-            <SingleReelCard key={idx} videoUrl={videoUrl} />
+          {reelVideos.map((url, idx) => (
+            <ReelItem
+              key={idx}
+              url={url}
+              ref={(el) => {
+                itemsRef.current[idx] = el;
+              }}
+            />
           ))}
         </div>
       </div>

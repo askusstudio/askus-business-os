@@ -1,9 +1,8 @@
 'use client'
 import React from 'react';
-import { motion } from 'framer-motion';
 
 const ClientLogos = () => {
-  // Direct live websites mapping
+  // Direct live websites mapping (100% same data)
   const BRAND_LINKS: Record<string, string> = {
     'Active Story (1).avif': 'https://theactivestory.com',
     'Bathkart.avif': 'https://bathkart.in',
@@ -102,10 +101,10 @@ const ClientLogos = () => {
   };
 
   return (
-    <section className="py-20 sm:py-28 bg-[#fafafa] border-y border-slate-100/80 font-sans selection:bg-[#bbf770] selection:text-black">
+    <section className="py-16 sm:py-24 bg-[#fafafa] border-y border-slate-100 font-sans selection:bg-[#bbf770] selection:text-black">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
         {/* Modern Heading */}
-        <div className="space-y-3 mb-16">
+        <div className="space-y-3 mb-12 sm:mb-16">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#bbf770]/40 border border-[#bbf770] text-emerald-950 text-[11px] font-bold uppercase tracking-widest">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
             PROOF OF WORK
@@ -118,24 +117,22 @@ const ClientLogos = () => {
           </p>
         </div>
 
-        {/* Clean Logo Grid with Dynamic Tap Action */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6 sm:gap-8 items-center justify-items-center">
+        {/* Lightweight & Super Smooth Logo Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6 items-center justify-items-center">
           {logos.map((logo, index) => (
-            <motion.div
+            <div
               key={index}
               onClick={() => handleLogoTap(logo)}
-              initial={{ opacity: 0, y: 15 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-30px" }}
-              transition={{ delay: (index % 6) * 0.03, duration: 0.3 }}
-              className="w-full h-24 sm:h-28 flex items-center justify-center p-3 sm:p-4 rounded-2xl bg-white border border-slate-200/60 shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_30px_rgba(0,0,0,0.06)] hover:border-slate-300 hover:-translate-y-1 transition-all duration-200 group cursor-pointer select-none"
+              className="w-full h-24 sm:h-28 flex items-center justify-center p-3 sm:p-4 rounded-2xl bg-white border border-slate-200/60 shadow-[0_2px_8px_rgba(0,0,0,0.02)] hover:shadow-[0_10px_24px_rgba(0,0,0,0.06)] hover:border-slate-300 hover:-translate-y-1 transition-all duration-200 group cursor-pointer select-none"
             >
               <img
                 src={`/logos/${logo}`}
                 alt="Client brand"
-                className="max-w-[120px] max-h-12 object-contain transition-transform duration-200 group-hover:scale-105"
+                loading="lazy"
+                decoding="async"
+                className="max-w-[110px] max-h-12 object-contain transition-transform duration-200 group-hover:scale-105 pointer-events-none"
               />
-            </motion.div>
+            </div>
           ))}
         </div>
       </div>
