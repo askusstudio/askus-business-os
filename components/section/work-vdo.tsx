@@ -3,16 +3,22 @@ import { motion } from 'framer-motion';
 
 // --- Video Reel Section ---
 const VideoReel = () => {
-    // High-performance direct CDN video streams (No 404s, instant load)
-    const videos = [
-        "https://assets.mixkit.co/videos/preview/mixkit-fashion-model-in-neon-light-40137-large.mp4",
-        "https://assets.mixkit.co/videos/preview/mixkit-recording-a-podcast-in-a-studio-43407-large.mp4",
-        "https://assets.mixkit.co/videos/preview/mixkit-hands-of-a-woman-typing-on-a-computer-laptop-42999-large.mp4",
-        "https://assets.mixkit.co/videos/preview/mixkit-photographer-taking-pictures-of-a-model-41002-large.mp4",
-        "https://assets.mixkit.co/videos/preview/mixkit-woman-holding-a-glass-of-wine-and-looking-at-camera-40166-large.mp4",
-        "https://assets.mixkit.co/videos/preview/mixkit-man-dancing-under-colored-lights-42938-large.mp4"
+    const supabaseBase = "https://xaxnevroftdfyquhocvj.supabase.co/storage/v1/object/public/videos";
+
+    const videoFiles = [
+        "AskUs_Work Portfolio (9).mp4",
+        "bolin.mp4",
+        "CMY.MP4",
+        "CR 1 mrugg v5.mp4",
+        "Dusk Hanging_1.mp4",
+        "mrugg v2(2).mp4",
+        "Stanley Iceflow_4.mp4",
+        "sv12.mp4",
+        "v1.mp4",
+        "v2.mp4"
     ];
 
+    const videos = videoFiles.map(file => `${supabaseBase}/${encodeURIComponent(file)}`);
     const reelVideos = [...videos, ...videos, ...videos];
 
     const trackRef = useRef<HTMLDivElement>(null);
@@ -115,7 +121,7 @@ const VideoReel = () => {
                                 muted
                                 loop
                                 playsInline
-                                preload="auto"
+                                preload="metadata"
                                 className="w-full h-full object-cover"
                             />
                         </div>
