@@ -24,6 +24,28 @@ const VideoReel = () => {
     const trackRef = useRef<HTMLDivElement>(null);
     const itemsRef = useRef<(HTMLDivElement | null)[]>([]);
 
+    // 1. Force muted & play programmatic fix for browser autoplay restrictions
+    const handleVideoMount = (el: HTMLVideoElement | null) => {
+        if (!el) return;
+        el.muted = true;
+        el.defaultMuted = true;
+        el.playsInline = true;
+        
+        const playPromise = el.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(() => {
+                // Auto-retry play on first user interaction
+                const retryPlay = () => {
+                    el.play();
+                    window.removeEventListener('click', retryPlay);
+                    window.removeEventListener('touchstart', retryPlay);
+                };
+                window.addEventListener('click', retryPlay);
+                window.addEventListener('touchstart', retryPlay);
+            });
+        }
+    };
+
     useEffect(() => {
         let animationFrameId: number;
         let xPos = 0;
@@ -111,17 +133,24 @@ const VideoReel = () => {
                             ref={(el) => {
                                 itemsRef.current[idx] = el;
                             }}
-                            className="flex-shrink-0 w-[200px] sm:w-[220px] md:w-[280px] lg:w-[320px] aspect-[2/3] bg-neutral-900 rounded-xl overflow-hidden shadow-2xl transition-transform duration-75 ease-out relative group"
+                            className="flex-shrink-0 w-[200px] sm:w-[220px] md:w-[280px] lg:w-[320px] aspect-[2/3] bg-neutral-900 rounded-xl overflow-hidden shadow-2xl transition-transform duration-75 ease-out relative group cursor-pointer"
                             style={{ willChange: 'transform, opacity' }}
+                            onClick={(e) => {
+                                const video = e.currentTarget.querySelector('video');
+                                if (video) {
+                                    video.paused ? video.play() : video.pause();
+                                }
+                            }}
                         >
                             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/0 to-black/20 z-10 pointer-events-none" />
                             <video
+                                ref={handleVideoMount}
                                 src={videoUrl}
                                 autoPlay
                                 muted
                                 loop
                                 playsInline
-                                preload="metadata"
+                                preload="auto"
                                 className="w-full h-full object-cover"
                             />
                         </div>
