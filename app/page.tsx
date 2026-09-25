@@ -14,7 +14,6 @@ import Agency from '@/components/section/agency';
 import FAQ from '@/components/section/faq';
 
 import AICopilot from '@/components/AICopilot';
-import PortfolioShowcase from '@/components/PortfolioShowcase';
 
 export default function App() {
   const [copilotOpen, setCopilotOpen] = useState(false);
@@ -28,11 +27,6 @@ export default function App() {
         <ClientLogos />
         <VideoReel />
         <Work />
-
-        {/* Portfolio & Case Studies Showcase on Main Website */}
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-          <PortfolioShowcase projects={[]} />
-        </section>
 
         {/* <ServicesSection /> */}
         <Services />

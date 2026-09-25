@@ -3,9 +3,43 @@ import React from 'react';
 import { motion } from 'framer-motion';
 
 const ClientLogos = () => {
+  // Direct live websites mapping
+  const BRAND_LINKS: Record<string, string> = {
+    'Active Story (1).avif': 'https://theactivestory.com',
+    'Bathkart.avif': 'https://bathkart.in',
+    'Chivri.avif': 'https://chivri.com',
+    'Cool Cool Spray (LOGO-1).png': 'https://coolcool.in',
+    'Crazy Rc.webp': 'https://withuss.com',
+    'Elysian Cartpes.webp': 'https://elysiancarpets.com',
+    'Empowered@4x.png': 'https://articulate-learning.com',
+    'Etbar Logo.png': 'https://pavitramm.com',
+    'Evolving.avif': 'https://withuss.com',
+    'Glam Flow (512x512)-01 (1).png': 'https://elko.in',
+    'Grindpound.avif': 'https://wheelwash.co.in',
+    'Inara logo.png': 'https://elkohealthcare.com',
+    'Infinity Logo-01 (1).png': 'https://marsev.in',
+    'Inti Faishion.webp': 'https://buttercrumb.in',
+    'Mithang Mantra_1-02.png': 'https://chivri.com',
+    'My fair Lady.jpg': 'https://withuss.com',
+    'Panteazy.webp': 'https://withuss.com',
+    'Pastel_Feminine_Flower_Wedding_Organizer_Logo_3_x_3_in__20240705_143054_0000.png': 'https://shuddhaspace.com',
+    'Rishi Sehgal Video-02.png': 'https://digimilestone.com',
+    'Rughz.avif': 'https://kovalentcoatings.com',
+    'Tinycare.avif': 'https://elkohealthcare.com',
+    'Verline.avif': 'https://askindia.info',
+    'Yaahvi.avif': 'https://theactivestory.com',
+    'ZEERI_2f09bc97-c7fb-46c0-b89e-5ad5ca7c9b9e.avif': 'https://askindia.info',
+    'sr_logo.png': 'https://vaimsadvisors.com',
+    'tree logo1.png': 'https://garimahardware.in',
+    'Header_logo-jpg.avif': 'https://techwix.in',
+    'cmc.png': 'https://socionimpact.com',
+    'Stay Organized, Work Smarter! (1).png': 'https://kaaunitedsolutions.com',
+    'TRAINFLUENCE _25 (9).png': 'https://drsabiamangat.in',
+    'Sharang Logo Final-01 (1).png': 'https://thisabilitycare.com.au',
+  };
+
   const logos = [
     "Active Story (1).avif",
-    // "Active Story.avif",
     "Bathkart.avif",
     "Chivri.avif",
     "Cool Cool Spray (LOGO-1).png",
@@ -23,7 +57,6 @@ const ClientLogos = () => {
     "IMG-20240912-WA0011.jpg",
     "IMG-20240912-WA0012.jpg",
     "IMG-20240912-WA0013.jpg",
-    // "IMG_1090.PNG",
     "Inara logo.png",
     "Infinity Logo-01 (1).png",
     "Inti Faishion.webp",
@@ -48,8 +81,6 @@ const ClientLogos = () => {
     "Tinycare.avif",
     "Untitled_design.webp",
     "Verline.avif",
-    // "WHITE.png",
-    // "Wildhorn.avif",
     "Yaahvi.avif",
     "ZEERI_2f09bc97-c7fb-46c0-b89e-5ad5ca7c9b9e.avif",
     "cmc.png",
@@ -61,26 +92,48 @@ const ClientLogos = () => {
     "tree logo1.png"
   ];
 
+  const handleLogoTap = (logo: string) => {
+    const url = BRAND_LINKS[logo];
+    if (url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } else {
+      window.location.reload();
+    }
+  };
+
   return (
-    <section className="py-12 sm:py-16 md:py-20 bg-white">
-      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 md:px-8 text-center">
-        <h2 className="text-xs sm:text-sm font-semibold text-black/60 uppercase tracking-[0.2em] mb-8 md:mb-12">
-          Trusted By
-        </h2>
-        <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-0 items-center justify-items-center">
+    <section className="py-20 sm:py-28 bg-[#fafafa] border-y border-slate-100/80 font-sans selection:bg-[#bbf770] selection:text-black">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        {/* Modern Heading */}
+        <div className="space-y-3 mb-16">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#bbf770]/40 border border-[#bbf770] text-emerald-950 text-[11px] font-bold uppercase tracking-widest">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+            PROOF OF WORK
+          </div>
+          <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-tight">
+            TRUSTED BY <span className="underline decoration-[#bbf770] decoration-wavy decoration-2">50+ BRANDS</span>
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-500 font-medium max-w-lg mx-auto">
+            From emerging D2C powerhouses to established global enterprises.
+          </p>
+        </div>
+
+        {/* Clean Logo Grid with Dynamic Tap Action */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6 sm:gap-8 items-center justify-items-center">
           {logos.map((logo, index) => (
             <motion.div
               key={index}
-              initial={{ opacity: 0, y: 40, scale: 0.9 }}
-              whileInView={{ opacity: 1, y: 0, scale: 1 }}
-              viewport={{ once: true, margin: "-50px" }}
-              transition={{ delay: (index % 6) * 0.1, duration: 0.6, type: "spring" }}
-              className="w-24 h-24 sm:w-32 sm:h-32 md:w-40 md:h-40 lg:w-48 lg:h-48 flex items-center justify-center p-3 sm:p-4 lg:p-6"
+              onClick={() => handleLogoTap(logo)}
+              initial={{ opacity: 0, y: 15 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-30px" }}
+              transition={{ delay: (index % 6) * 0.03, duration: 0.3 }}
+              className="w-full h-24 sm:h-28 flex items-center justify-center p-3 sm:p-4 rounded-2xl bg-white border border-slate-200/60 shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:shadow-[0_12px_30px_rgba(0,0,0,0.06)] hover:border-slate-300 hover:-translate-y-1 transition-all duration-200 group cursor-pointer select-none"
             >
               <img
                 src={`/logos/${logo}`}
-                alt={`best digital marketing agency in lucknow client ${index + 1}`}
-                className="max-w-full max-h-full object-contain transition-all duration-300 hover:scale-110"
+                alt="Client brand"
+                className="max-w-[120px] max-h-12 object-contain transition-transform duration-200 group-hover:scale-105"
               />
             </motion.div>
           ))}
