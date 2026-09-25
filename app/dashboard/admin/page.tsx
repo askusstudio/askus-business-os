@@ -9,6 +9,11 @@ import ProjectBriefViewer from '@/components/ProjectBriefViewer';
 import DeliverableVersionManager from '@/components/DeliverableVersionManager';
 import FinancialProfitabilityAnalytics from '@/components/FinancialProfitabilityAnalytics';
 import NotificationBell from '@/components/NotificationBell';
+import CommandPalette from '@/components/CommandPalette';
+import AICopilot from '@/components/AICopilot';
+import ProjectConnectChat from '@/components/ProjectConnectChat';
+import AutomationCenter from '@/components/AutomationCenter';
+import PortfolioShowcase from '@/components/PortfolioShowcase';
 
 const ROLE_HIERARCHY = [
   { key: 'admin', label: 'Admin', badge: 'bg-rose-50 text-rose-700 border-rose-200' },
@@ -32,8 +37,11 @@ export default function AdminDashboard() {
   const [projectHoursMap, setProjectHoursMap] = useState<Record<string, number>>({});
   const [taskStats, setTaskStats] = useState<{ total: number; completed: number }>({ total: 0, completed: 0 });
   const [currentUserId, setCurrentUserId] = useState<string>('');
-  const [activeProjectTab, setActiveProjectTab] = useState<Record<string, 'files' | 'timelog' | 'invoices' | 'kanban' | 'brief' | 'versions'>>({});
+  const [activeProjectTab, setActiveProjectTab] = useState<Record<string, 'files' | 'timelog' | 'invoices' | 'kanban' | 'brief' | 'versions' | 'chat'>>({});
   const [loading, setLoading] = useState(true);
+
+  // Quick Command & AI Copilot State
+  const [copilotOpen, setCopilotOpen] = useState(false);
 
   // Modals
   const [showProjectModal, setShowProjectModal] = useState(false);
@@ -408,6 +416,24 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex items-center gap-2.5">
+            {/* Quick Command & AI Copilot Action Triggers */}
+            <button
+              type="button"
+              onClick={() => setCopilotOpen(true)}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            >
+              ✨ Copilot
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, metaKey: true }));
+              }}
+              className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-mono font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer"
+            >
+              <span>⌘K / Ctrl+K</span>
+            </button>
+
             <button
               onClick={() => setShowInvoiceModal(true)}
               className="px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-all cursor-pointer"
@@ -560,7 +586,7 @@ export default function AdminDashboard() {
                               )}
                             </div>
 
-                            {/* 6 Tabs Drawer Navigation */}
+                            {/* 7 Tabs Drawer Navigation */}
                             <div className="border-t border-slate-100 pt-3.5 space-y-3">
                               <div className="flex gap-1.5 flex-wrap">
                                 {[
@@ -570,6 +596,7 @@ export default function AdminDashboard() {
                                   { key: 'versions', label: '🎨 Versions' },
                                   { key: 'timelog', label: `⏱️ Time (${loggedHours.toFixed(1)}h)` },
                                   { key: 'invoices', label: `💳 Invoices (${projInvoices.length})` },
+                                  { key: 'chat', label: '💬 Connect' },
                                 ].map((tabItem) => (
                                   <button
                                     key={tabItem.key}
@@ -596,6 +623,14 @@ export default function AdminDashboard() {
                               )}
                               {currentTab === 'timelog' && currentUserId && (
                                 <ProjectTimeTracker projectId={proj.id} userId={currentUserId} />
+                              )}
+                              {currentTab === 'chat' && currentUserId && (
+                                <ProjectConnectChat
+                                  projectId={proj.id}
+                                  projectTitle={proj.title}
+                                  currentUserId={currentUserId}
+                                  currentUserRole="admin"
+                                />
                               )}
                               {currentTab === 'invoices' && (
                                 <div className="space-y-2 pt-1">
@@ -749,7 +784,7 @@ export default function AdminDashboard() {
 
             </div>
 
-            {/* Bottom Section: Team Capacity Heatmap & Notice Publisher */}
+            {/* Middle Section: Team Capacity Heatmap & Notice Publisher */}
             <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 border-t border-slate-200 pt-7">
               
               {/* Team Capacity Heatmap (8 Cols) */}
@@ -815,6 +850,12 @@ export default function AdminDashboard() {
                 </form>
               </div>
 
+            </section>
+
+            {/* Bottom Section: Automation Engine & Portfolio Case Studies */}
+            <section className="space-y-7 border-t border-slate-200 pt-7">
+              <AutomationCenter />
+              <PortfolioShowcase projects={projects.filter((p) => p.status === 'Completed' || p.progress === 100)} />
             </section>
           </>
         )}
@@ -1196,6 +1237,10 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* Global Command Palette (⌘K) & AI Copilot Drawer */}
+      <CommandPalette onOpenCopilot={() => setCopilotOpen(true)} />
+      <AICopilot isOpen={copilotOpen} onClose={() => setCopilotOpen(false)} />
     </div>
   );
 }
