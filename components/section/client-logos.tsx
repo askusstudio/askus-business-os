@@ -2,7 +2,7 @@
 import React from 'react';
 
 const ClientLogos = () => {
-  // Direct live websites mapping (100% same data)
+  // Direct live websites mapping (100% untouched)
   const BRAND_LINKS: Record<string, string> = {
     'Active Story (1).avif': 'https://theactivestory.com',
     'Bathkart.avif': 'https://bathkart.in',
@@ -95,21 +95,19 @@ const ClientLogos = () => {
     const url = BRAND_LINKS[logo];
     if (url) {
       window.open(url, '_blank', 'noopener,noreferrer');
-    } else {
-      window.location.reload();
     }
   };
 
   return (
-    <section className="py-16 sm:py-24 bg-[#fafafa] border-y border-slate-100 font-sans selection:bg-[#bbf770] selection:text-black">
+    <section className="py-14 sm:py-20 md:py-24 bg-[#fafafa] border-y border-slate-100 font-sans selection:bg-[#bbf770] selection:text-black">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        {/* Modern Heading */}
-        <div className="space-y-3 mb-12 sm:mb-16">
+        {/* Heading */}
+        <div className="space-y-3 mb-10 sm:mb-16">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#bbf770]/40 border border-[#bbf770] text-emerald-950 text-[11px] font-bold uppercase tracking-widest">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
             PROOF OF WORK
           </div>
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-tight">
+          <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-tight">
             TRUSTED BY <span className="underline decoration-[#bbf770] decoration-wavy decoration-2">50+ BRANDS</span>
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 font-medium max-w-lg mx-auto">
@@ -117,20 +115,20 @@ const ClientLogos = () => {
           </p>
         </div>
 
-        {/* Lightweight & Super Smooth Logo Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6 items-center justify-items-center">
+        {/* Responsive Grid: Mobile par 3 cols, Tablet par 4 cols, Desktop par wahi 6 cols */}
+        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-6 items-center justify-items-center">
           {logos.map((logo, index) => (
             <div
               key={index}
               onClick={() => handleLogoTap(logo)}
-              className="w-full h-24 sm:h-28 flex items-center justify-center p-3 sm:p-4 rounded-2xl bg-white border border-slate-200/60 shadow-[0_2px_8px_rgba(0,0,0,0.02)] hover:shadow-[0_10px_24px_rgba(0,0,0,0.06)] hover:border-slate-300 hover:-translate-y-1 transition-all duration-200 group cursor-pointer select-none"
+              className="w-full h-20 sm:h-24 md:h-28 flex items-center justify-center p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-white border border-slate-200/60 shadow-[0_2px_8px_rgba(0,0,0,0.02)] hover:shadow-[0_10px_24px_rgba(0,0,0,0.06)] hover:border-slate-300 hover:-translate-y-1 transition-all duration-200 group cursor-pointer select-none"
             >
               <img
                 src={`/logos/${logo}`}
                 alt="Client brand"
                 loading="lazy"
                 decoding="async"
-                className="max-w-[110px] max-h-12 object-contain transition-transform duration-200 group-hover:scale-105 pointer-events-none"
+                className="max-w-[75px] sm:max-w-[100px] md:max-w-[110px] max-h-9 sm:max-h-12 object-contain transition-transform duration-200 group-hover:scale-105 pointer-events-none"
               />
             </div>
           ))}

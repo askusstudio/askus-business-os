@@ -1,5 +1,5 @@
 'use client'
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 
 interface ReelProps {
@@ -8,7 +8,6 @@ interface ReelProps {
 
 const ReelItem = React.forwardRef<HTMLDivElement, ReelProps>(({ url }, ref) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -18,14 +17,14 @@ const ReelItem = React.forwardRef<HTMLDivElement, ReelProps>(({ url }, ref) => {
     video.defaultMuted = true;
     video.playsInline = true;
 
-    const tryPlay = () => {
+    const playSafe = () => {
       video.play().catch(() => {});
     };
 
-    if (video.readyState >= 2) {
-      tryPlay();
+    if (video.readyState >= 1) {
+      playSafe();
     } else {
-      video.addEventListener('loadeddata', tryPlay, { once: true });
+      video.addEventListener('loadedmetadata', playSafe, { once: true });
     }
   }, [url]);
 
@@ -46,7 +45,7 @@ const ReelItem = React.forwardRef<HTMLDivElement, ReelProps>(({ url }, ref) => {
     <div
       ref={ref}
       onClick={handleToggle}
-      className="flex-shrink-0 w-[190px] sm:w-[220px] md:w-[260px] aspect-[9/16] bg-neutral-900 rounded-2xl md:rounded-3xl overflow-hidden shadow-xl hover:shadow-2xl transition-transform duration-75 ease-out relative cursor-pointer border border-black/5"
+      className="flex-shrink-0 w-[190px] sm:w-[220px] md:w-[260px] aspect-[9/16] bg-neutral-900 rounded-2xl md:rounded-3xl overflow-hidden shadow-xl hover:shadow-2xl relative cursor-pointer border border-black/5"
       style={{ willChange: 'transform' }}
     >
       <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/10 z-10 pointer-events-none" />
@@ -57,11 +56,9 @@ const ReelItem = React.forwardRef<HTMLDivElement, ReelProps>(({ url }, ref) => {
         muted
         loop
         playsInline
-        preload="auto"
-        onCanPlay={() => setIsLoaded(true)}
-        className={`w-full h-full object-cover pointer-events-none transition-opacity duration-300 ${
-          isLoaded ? 'opacity-100' : 'opacity-80'
-        }`}
+        crossOrigin="anonymous"
+        preload="metadata"
+        className="w-full h-full object-cover pointer-events-none"
       />
     </div>
   );
@@ -113,7 +110,7 @@ const VideoReel = () => {
 
         trackRef.current.style.transform = `translate3d(${xPos}px, 0, 0)`;
 
-        // Center zoom calculation
+        // Smooth Center Scaling
         const centerX = window.innerWidth / 2;
         const maxDist = window.innerWidth / 2;
 
@@ -124,7 +121,7 @@ const VideoReel = () => {
           const distance = Math.abs(centerX - itemCenterX);
 
           const normalized = Math.max(0, 1 - distance / maxDist);
-          const scale = 0.88 + normalized * 0.3; // 0.88x to 1.18x zoom
+          const scale = 0.88 + normalized * 0.26;
           const zIndex = Math.round(normalized * 25);
 
           item.style.transform = `scale(${scale})`;
