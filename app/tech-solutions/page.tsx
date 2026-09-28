@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { Nav, Footer, FloatingCallButton } from '@/components/Shared';
 
 const TECH_SERVICES = [
   {
@@ -36,16 +37,19 @@ const TECH_SERVICES = [
 
 export default function TechSolutionsPage() {
   const [formData, setFormData] = useState({ fullName: '', phone: '', email: '', service: 'Full-Stack Web & SaaS Applications', message: '' });
-  const [submitted, setSubmitted] = useState(false);
-  const [loading, setLoading] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      setSubmitted(true);
-    }, 800);
+
+    const whatsappNumber = '918009227002';
+    const textMsg = `*New Tech & Software Inquiry - AskUs Studio*%0A%0A` +
+      `*Name:* ${encodeURIComponent(formData.fullName)}%0A` +
+      `*Phone:* ${encodeURIComponent(formData.phone)}%0A` +
+      `*Email:* ${encodeURIComponent(formData.email)}%0A` +
+      `*Scope:* ${encodeURIComponent(formData.service)}%0A` +
+      `*Tech Details:* ${encodeURIComponent(formData.message || 'N/A')}`;
+
+    window.open(`https://api.whatsapp.com/send?phone=${whatsappNumber}&text=${textMsg}`, '_blank');
   };
 
   const handleInquire = (serviceName: string) => {
@@ -55,84 +59,79 @@ export default function TechSolutionsPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#fafafa] text-slate-900 font-sans selection:bg-[#C8FF91] selection:text-black">
-      <section className="pt-20 pb-16 sm:pt-28 sm:pb-20 border-b border-slate-200/80 bg-gradient-to-b from-white to-[#fafafa] text-center px-4">
-        <div className="max-w-5xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#C8FF91]/40 border border-[#C8FF91] text-emerald-950 text-xs font-bold uppercase tracking-widest mb-6">
-            Enterprise Tech & Software Architecture
-          </div>
-          <h1 className="text-3xl sm:text-5xl md:text-6xl font-black text-slate-950 tracking-tight leading-tight">
-            Build Scalable Products With <br />
-            <span className="underline decoration-[#C8FF91] decoration-wavy decoration-3">Modern Engineering</span>
-          </h1>
-          <p className="mt-5 text-base sm:text-lg text-slate-600 max-w-2xl mx-auto">
-            We architect and build full-stack web applications, mobile platforms, and AI automations that scale seamlessly with your company.
-          </p>
-          <div className="mt-8 flex justify-center gap-4">
-            <button
-              onClick={() => handleInquire('Full-Stack Web & SaaS Applications')}
-              className="bg-[#C8FF91] hover:bg-[#b8f57d] text-black font-bold px-7 py-3.5 rounded-full shadow-md transition-all active:scale-95 cursor-pointer text-sm sm:text-base"
-            >
-              Consult Tech Lead →
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="py-16 sm:py-24 max-w-6xl mx-auto px-4 sm:px-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {TECH_SERVICES.map((item, idx) => (
-            <motion.div
-              key={idx}
-              initial={{ opacity: 0, y: 15 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="bg-white rounded-2xl border border-slate-200 p-7 shadow-xs flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex justify-between items-center mb-4">
-                  <span className="text-3xl p-2.5 bg-slate-50 border border-slate-100 rounded-xl">{item.icon}</span>
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded bg-slate-100 text-slate-700">{item.badge}</span>
-                </div>
-                <h3 className="text-xl font-bold text-slate-900">{item.title}</h3>
-                <p className="text-xs text-slate-500 mt-2 leading-relaxed">{item.description}</p>
-                <div className="mt-5 pt-4 border-t border-slate-100">
-                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Technical Capabilities:</span>
-                  <ul className="space-y-1.5">
-                    {item.deliverables.map((del, dIdx) => (
-                      <li key={dIdx} className="text-xs text-slate-600 flex items-center gap-2">
-                        <span className="text-emerald-600 font-bold">✓</span> {del}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
+    <>
+      <Nav />
+      <main className="min-h-screen bg-[#fafafa] text-slate-900 font-sans selection:bg-[#C8FF91] selection:text-black pt-20">
+        <section className="pt-20 pb-16 sm:pt-28 sm:pb-20 border-b border-slate-200/80 bg-gradient-to-b from-white to-[#fafafa] text-center px-4">
+          <div className="max-w-5xl mx-auto">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#C8FF91]/40 border border-[#C8FF91] text-emerald-950 text-xs font-bold uppercase tracking-widest mb-6">
+              Enterprise Tech & Software Architecture
+            </div>
+            <h1 className="text-3xl sm:text-5xl md:text-6xl font-black text-slate-950 tracking-tight leading-tight">
+              Build Scalable Products With <br />
+              <span className="underline decoration-[#C8FF91] decoration-wavy decoration-3">Modern Engineering</span>
+            </h1>
+            <p className="mt-5 text-base sm:text-lg text-slate-600 max-w-2xl mx-auto">
+              We architect and build full-stack web applications, mobile platforms, and AI automations that scale seamlessly with your company.
+            </p>
+            <div className="mt-8 flex justify-center gap-4">
               <button
-                onClick={() => handleInquire(item.title)}
-                className="mt-6 w-full py-2.5 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                onClick={() => handleInquire('Full-Stack Web & SaaS Applications')}
+                className="bg-[#C8FF91] hover:bg-[#b8f57d] text-black font-bold px-7 py-3.5 rounded-full shadow-md transition-all active:scale-95 cursor-pointer text-sm sm:text-base"
               >
-                Inquire for {item.title} →
+                Consult Tech Lead →
               </button>
-            </motion.div>
-          ))}
-        </div>
-      </section>
-
-      <section id="tech-inquiry" className="py-16 bg-white border-t border-slate-200">
-        <div className="max-w-3xl mx-auto px-4">
-          <div className="text-center mb-8">
-            <h2 className="text-2xl sm:text-3xl font-black text-slate-900">Start Your Tech Project</h2>
-            <p className="text-xs sm:text-sm text-slate-500 mt-1">Discuss architecture, timelines, and deliverables with our engineering team.</p>
+            </div>
           </div>
+        </section>
 
-          <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 sm:p-8">
-            {submitted ? (
-              <div className="text-center py-8">
-                <span className="text-4xl block mb-2">🚀</span>
-                <h3 className="text-lg font-bold text-slate-900">Project Scoping Request Received!</h3>
-                <p className="text-xs text-slate-500 mt-1">Our technical lead will review your requirements and reach out today.</p>
-              </div>
-            ) : (
+        <section className="py-16 sm:py-24 max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {TECH_SERVICES.map((item, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, y: 15 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                className="bg-white rounded-2xl border border-slate-200 p-7 shadow-xs flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-3xl p-2.5 bg-slate-50 border border-slate-100 rounded-xl">{item.icon}</span>
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded bg-slate-100 text-slate-700">{item.badge}</span>
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900">{item.title}</h3>
+                  <p className="text-xs text-slate-500 mt-2 leading-relaxed">{item.description}</p>
+                  <div className="mt-5 pt-4 border-t border-slate-100">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Technical Capabilities:</span>
+                    <ul className="space-y-1.5">
+                      {item.deliverables.map((del, dIdx) => (
+                        <li key={dIdx} className="text-xs text-slate-600 flex items-center gap-2">
+                          <span className="text-emerald-600 font-bold">✓</span> {del}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleInquire(item.title)}
+                  className="mt-6 w-full py-2.5 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  Inquire for {item.title} →
+                </button>
+              </motion.div>
+            ))}
+          </div>
+        </section>
+
+        <section id="tech-inquiry" className="py-16 bg-white border-t border-slate-200">
+          <div className="max-w-3xl mx-auto px-4">
+            <div className="text-center mb-8">
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-900">Start Your Tech Project</h2>
+              <p className="text-xs sm:text-sm text-slate-500 mt-1">Discuss architecture and deliverables directly with our team on WhatsApp.</p>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 sm:p-8">
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -198,16 +197,18 @@ export default function TechSolutionsPage() {
 
                 <button
                   type="submit"
-                  disabled={loading}
-                  className="w-full py-3 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
+                  className="w-full py-3 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
                 >
-                  {loading ? 'Submitting...' : 'Submit Engineering Inquiry →'}
+                  <span>Submit Inquiry to WhatsApp</span>
+                  <span>→</span>
                 </button>
               </form>
-            )}
+            </div>
           </div>
-        </div>
-      </section>
-    </main>
+        </section>
+      </main>
+      <Footer />
+      <FloatingCallButton />
+    </>
   );
 }
