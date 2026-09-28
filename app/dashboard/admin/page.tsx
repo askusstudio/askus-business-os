@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import ProjectFileManager from '@/components/ProjectFileManager';
 import ProjectTimeTracker from '@/components/ProjectTimeTracker';
 import ProjectKanbanBoard from '@/components/ProjectKanbanBoard';
@@ -24,7 +25,17 @@ const ROLE_HIERARCHY = [
   { key: 'intern', label: 'Intern', badge: 'bg-slate-100 text-slate-600 border-slate-200' },
 ];
 
-export default function AdminDashboard() {
+const PROJECT_STATUSES = [
+  'Planning',
+  'In Progress',
+  'At Risk',
+  'Blocked',
+  'Under Review',
+  'Completed',
+  'Archived',
+];
+
+export default function WorkspaceOverviewDashboard() {
   const [projects, setProjects] = useState<any[]>([]);
   const [inquiries, setInquiries] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
@@ -191,7 +202,7 @@ export default function AdminDashboard() {
     };
   }, [router]);
 
-  // Feature 1: Invoicing Actions
+  // Invoice creation
   const handleCreateInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newInvoice.project_id || !newInvoice.amount) return;
@@ -234,9 +245,9 @@ export default function AdminDashboard() {
     loadData();
   };
 
-  // Feature 2: CRM Lead Conversion
+  // Convert CRM Lead
   const handleConvertInquiry = async (inq: any) => {
-    if (!confirm(`Convert lead "${inq.full_name || inq.name}" into client and auto-create project?`)) return;
+    if (!confirm(`Convert lead "${inq.full_name || inq.name}" into client and launch project?`)) return;
     setConvertingId(inq.id);
 
     try {
@@ -254,7 +265,7 @@ export default function AdminDashboard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Conversion failed');
 
-      alert(`Success! Created client account for ${inq.email}`);
+      alert(`Success! Created client workspace for ${inq.email}`);
       loadData();
     } catch (err: any) {
       alert('Conversion error: ' + err.message);
@@ -263,7 +274,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Feature 7: Broadcast Announcements
+  // Broadcast Notice
   const handlePostAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAnnouncement.trim()) return;
@@ -287,6 +298,7 @@ export default function AdminDashboard() {
     loadData();
   };
 
+  // Create User
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreatingUser(true);
@@ -308,6 +320,7 @@ export default function AdminDashboard() {
     }
   };
 
+  // Create Project
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProject.title.trim()) return;
@@ -335,6 +348,7 @@ export default function AdminDashboard() {
     }
   };
 
+  // Update Project
   const handleUpdateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProject) return;
@@ -372,14 +386,21 @@ export default function AdminDashboard() {
     }
   };
 
+  // Helper for Project Health indicator
+  const getProjectHealth = (progress: number, status: string) => {
+    if (status === 'Blocked' || status === 'At Risk') return { health: '64%', label: 'At Risk', color: 'bg-rose-50 text-rose-700 border-rose-200' };
+    if (progress >= 85 || status === 'Completed') return { health: '98%', label: 'Optimal', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+    return { health: '91%', label: 'On Track', color: 'bg-sky-50 text-sky-700 border-sky-200' };
+  };
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans antialiased selection:bg-emerald-100 selection:text-emerald-900">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans antialiased selection:bg-[#bbf770] selection:text-black">
       {/* Broadcast Notice Bar */}
       {announcements.length > 0 && (
-        <div className="bg-emerald-50 border-b border-emerald-200 px-4 py-2.5 text-xs flex items-center justify-between text-emerald-900">
+        <div className="bg-emerald-50 border-b border-emerald-200 px-4 py-2 text-xs flex items-center justify-between text-emerald-900">
           <div className="flex items-center gap-2.5 max-w-5xl truncate">
             <span className="bg-emerald-600 text-white font-bold text-[10px] uppercase px-2 py-0.5 rounded-full tracking-wide">
-              Notice
+              Announcement
             </span>
             <span className="font-medium truncate">{announcements[0].message}</span>
           </div>
@@ -392,12 +413,11 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Clean White Top Header */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
+      {/* Modern SaaS Header: Workspace Overview */}
+      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {/* Official Askus Studio Logo */}
-            <div className="w-9 h-9 rounded-lg overflow-hidden border border-slate-200 shadow-xs flex items-center justify-center shrink-0 select-none bg-white">
+          <div className="flex items-center gap-4">
+            <div className="w-9 h-9 rounded-xl overflow-hidden border border-slate-200/80 shadow-xs flex items-center justify-center shrink-0 select-none bg-white">
               <img
                 src="/logo/site-logo.jpg"
                 alt="Askus Studio"
@@ -405,24 +425,39 @@ export default function AdminDashboard() {
               />
             </div>
             <div>
-              <h1 className="text-xs sm:text-sm font-bold text-slate-900 tracking-wide uppercase flex items-center gap-2">
-                ADMIN MASTER CONSOLE
-                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  Super Admin
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm font-black text-slate-950 tracking-tight">
+                  Workspace Overview
+                </h1>
+                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-[#bbf770]/40 text-emerald-950 border border-[#bbf770]">
+                  Operating System
                 </span>
-              </h1>
-              <p className="text-[11px] text-slate-500">Agency Operations & Financial Control</p>
+              </div>
+              <p className="text-[11px] text-slate-500 font-medium">Digital Business & Project Management Engine</p>
             </div>
+
+            {/* Quick module jumps */}
+            <nav className="hidden lg:flex items-center gap-4 ml-6 pl-6 border-l border-slate-200 text-xs font-medium text-slate-600">
+              <Link href="/legal-solutions" className="hover:text-black transition-colors">
+                ⚖️ Legal Solutions
+              </Link>
+              <a href="#automation-center" className="hover:text-black transition-colors">
+                ⚡ Automations
+              </a>
+              <a href="#portfolio-showcase" className="hover:text-black transition-colors">
+                🎨 Portfolio
+              </a>
+            </nav>
           </div>
 
           <div className="flex items-center gap-2.5">
-            {/* Quick Command & AI Copilot Action Triggers */}
+            {/* AI Copilot & Command Palette */}
             <button
               type="button"
               onClick={() => setCopilotOpen(true)}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-900 bg-[#bbf770] hover:bg-[#a8f255] border border-[#bbf770] transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
             >
-              ✨ Copilot
+              <span>✨ Ask Copilot</span>
             </button>
             <button
               type="button"
@@ -431,24 +466,24 @@ export default function AdminDashboard() {
               }}
               className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-mono font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer"
             >
-              <span>⌘K / Ctrl+K</span>
+              <span>⌘K</span>
             </button>
 
             <button
               onClick={() => setShowInvoiceModal(true)}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-all cursor-pointer"
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer"
             >
-              💳 + Invoice
+              + Invoice
             </button>
             <button
               onClick={() => setShowUserModal(true)}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer"
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer"
             >
               + User
             </button>
             <button
               onClick={() => setShowProjectModal(true)}
-              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-all shadow-xs cursor-pointer"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-bold text-white bg-slate-950 hover:bg-black transition-all shadow-xs cursor-pointer active:scale-95"
             >
               + Project
             </button>
@@ -463,52 +498,55 @@ export default function AdminDashboard() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-7 space-y-7">
-        {/* KPI Strip */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* KPI Strip: Modern Business Metrics */}
         <section className="grid grid-cols-2 md:grid-cols-6 gap-3.5">
           {[
-            { label: 'Active Projects', val: projects.length, highlight: 'text-emerald-700' },
-            { label: 'Total Invoiced', val: `₹${invoices.reduce((a, c) => a + Number(c.amount || 0), 0).toLocaleString()}`, highlight: 'text-slate-900' },
-            { label: 'Team Members', val: employees.length, highlight: 'text-slate-900' },
-            { label: 'Time Tracked', val: `${totalHoursWorked.toFixed(1)}h`, highlight: 'text-slate-900' },
-            { label: 'Tasks Done', val: `${taskStats.completed}/${taskStats.total}`, highlight: 'text-slate-900' },
-            { label: 'CRM Leads', val: inquiries.length, highlight: 'text-sky-700' },
+            { label: 'Active Projects', val: projects.length, highlight: 'text-slate-900', note: 'Linear workflows' },
+            { label: 'Invoiced Revenue', val: `₹${invoices.reduce((a, c) => a + Number(c.amount || 0), 0).toLocaleString()}`, highlight: 'text-emerald-700', note: 'Recognized' },
+            { label: 'Team Capacity', val: `${employees.length} Active`, highlight: 'text-slate-900', note: 'Workload distribution' },
+            { label: 'Time Invested', val: `${totalHoursWorked.toFixed(1)}h`, highlight: 'text-slate-900', note: 'Logged sprints' },
+            { label: 'Tasks Done', val: `${taskStats.completed}/${taskStats.total}`, highlight: 'text-slate-900', note: 'Sprint velocity' },
+            { label: 'Client Pipeline', val: inquiries.length, highlight: 'text-sky-700', note: 'Inquiries & leads' },
           ].map((item, idx) => (
             <div
               key={idx}
-              className="bg-white border border-slate-200/90 rounded-xl p-4 flex flex-col justify-between shadow-xs hover:border-slate-300 transition-all"
+              className="bg-white border border-slate-200/90 rounded-2xl p-4 flex flex-col justify-between shadow-[0_2px_8px_rgba(0,0,0,0.02)] hover:border-slate-300 transition-all"
             >
-              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{item.label}</span>
-              <span className={`text-2xl font-bold mt-2 tracking-tight ${item.highlight}`}>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{item.label}</span>
+              </div>
+              <span className={`text-2xl font-black mt-2 tracking-tight ${item.highlight}`}>
                 {item.val}
               </span>
+              <span className="text-[10px] text-slate-400 mt-1 font-medium">{item.note}</span>
             </div>
           ))}
         </section>
 
         {loading ? (
-          <div className="py-24 text-center text-xs text-slate-400 font-mono">Loading operations workspace...</div>
+          <div className="py-24 text-center text-xs text-slate-400 font-mono">Synchronizing workspace ecosystem...</div>
         ) : (
           <>
             {/* Split Screen Master Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               
-              {/* Left Column: Projects & Tabs + Financial Profitability Analytics (7 Cols) */}
+              {/* Left Column: Projects, Kanban, Brief, Chat, Versions & Finance (7 Cols) */}
               <section className="lg:col-span-7 space-y-6">
                 <div className="space-y-4">
                   <div className="flex items-center justify-between pb-1">
                     <div>
-                      <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Active Client Deliverables</h2>
-                      <p className="text-xs text-slate-500">Kanban sprints, version annotations, briefs & logs</p>
+                      <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Active Projects & Workspaces</h2>
+                      <p className="text-xs text-slate-500">Live milestones, deliverables, task boards & collaborative communication</p>
                     </div>
-                    <span className="text-xs font-mono text-slate-600 bg-white px-2.5 py-0.5 rounded-full border border-slate-200 shadow-2xs">
-                      {projects.length} Total
+                    <span className="text-xs font-mono font-semibold text-slate-700 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-2xs">
+                      {projects.length} In Progress
                     </span>
                   </div>
 
                   {projects.length === 0 ? (
-                    <div className="bg-white border border-dashed border-slate-200 rounded-xl p-12 text-center text-xs text-slate-400">
-                      No active projects. Click "+ Project" to launch one.
+                    <div className="bg-white border border-dashed border-slate-200 rounded-2xl p-12 text-center text-xs text-slate-400">
+                      No active projects in this workspace. Launch one using the "+ Project" button.
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -518,22 +556,26 @@ export default function AdminDashboard() {
                         const currentTab = activeProjectTab[proj.id] || 'files';
                         const loggedHours = projectHoursMap[proj.id] || 0;
                         const projInvoices = invoices.filter((i) => String(i.project_id) === String(proj.id));
+                        const health = getProjectHealth(proj.progress || 0, proj.status || 'In Progress');
 
                         return (
-                          <div key={proj.id} className="bg-white border border-slate-200/90 rounded-xl p-5 space-y-4 shadow-xs hover:border-slate-300 transition-all">
+                          <div key={proj.id} className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:border-slate-300 transition-all">
                             {/* Project Header */}
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2">
-                                  <h3 className="font-bold text-sm text-slate-900 truncate">{proj.title}</h3>
+                                  <h3 className="font-bold text-sm text-slate-950 truncate">{proj.title}</h3>
                                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
-                                    #{proj.id}
+                                    PRJ-{proj.id}
+                                  </span>
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${health.color}`}>
+                                    Health: {health.health} • {health.label}
                                   </span>
                                 </div>
-                                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-1.5">
-                                  <span>Client: <strong className="text-slate-800">{assignedClient?.full_name || 'Unassigned'}</strong></span>
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-2">
+                                  <span>Client: <strong className="text-slate-800 font-semibold">{assignedClient?.full_name || 'Unassigned'}</strong></span>
                                   <span className="text-slate-300">•</span>
-                                  <span>Lead: <strong className="text-slate-800">{assignedEmp?.full_name || 'Unassigned'}</strong></span>
+                                  <span>Task Owner: <strong className="text-slate-800 font-semibold">{assignedEmp?.full_name || 'Unassigned'}</strong></span>
                                 </div>
                               </div>
 
@@ -550,7 +592,7 @@ export default function AdminDashboard() {
                                   </span>
                                   <button
                                     onClick={() => setEditingProject(proj)}
-                                    className="text-xs px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors font-medium cursor-pointer"
+                                    className="text-xs px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors font-semibold cursor-pointer"
                                   >
                                     Edit
                                   </button>
@@ -565,46 +607,46 @@ export default function AdminDashboard() {
                             {/* Progress Line */}
                             <div className="space-y-1.5">
                               <div className="flex justify-between text-xs font-mono">
-                                <span className="text-slate-500">Completion</span>
-                                <span className="text-emerald-700 font-bold">{proj.progress}%</span>
+                                <span className="text-slate-500 font-sans">Status: <strong className="text-slate-800">{proj.status || 'In Progress'}</strong></span>
+                                <span className="text-slate-900 font-bold">{proj.progress}% Completed</span>
                               </div>
-                              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                <div className="h-full bg-emerald-600 transition-all duration-300" style={{ width: `${proj.progress}%` }} />
+                              <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-slate-950 transition-all duration-300" style={{ width: `${proj.progress}%` }} />
                               </div>
                             </div>
 
-                            {/* Milestone Box & Link */}
-                            <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs">
+                            {/* Milestone Box & Preview */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs">
                               <div className="truncate text-slate-700">
-                                <span className="text-slate-400 font-medium mr-1.5">Milestone:</span>
-                                {proj.pending_tasks || 'No current blockers'}
+                                <span className="text-slate-400 font-semibold mr-1.5 uppercase text-[10px]">Active Milestone:</span>
+                                {proj.pending_tasks || 'Sprint goals on schedule'}
                               </div>
                               {proj.preview_url && (
-                                <a href={proj.preview_url} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-emerald-700 hover:underline shrink-0">
+                                <a href={proj.preview_url} target="_blank" rel="noreferrer" className="text-[11px] font-bold text-slate-900 hover:underline shrink-0">
                                   ↗ Open Deliverable
                                 </a>
                               )}
                             </div>
 
-                            {/* 7 Tabs Drawer Navigation */}
+                            {/* SaaS Tabs Navigation */}
                             <div className="border-t border-slate-100 pt-3.5 space-y-3">
                               <div className="flex gap-1.5 flex-wrap">
                                 {[
                                   { key: 'files', label: '📁 Files' },
-                                  { key: 'kanban', label: '📌 Kanban Sprint' },
+                                  { key: 'kanban', label: '📌 Tasks / Kanban' },
                                   { key: 'brief', label: '📋 Brief' },
                                   { key: 'versions', label: '🎨 Versions' },
-                                  { key: 'timelog', label: `⏱️ Time (${loggedHours.toFixed(1)}h)` },
+                                  { key: 'timelog', label: `⏱️ Sprints (${loggedHours.toFixed(1)}h)` },
                                   { key: 'invoices', label: `💳 Invoices (${projInvoices.length})` },
                                   { key: 'chat', label: '💬 Connect' },
                                 ].map((tabItem) => (
                                   <button
                                     key={tabItem.key}
                                     onClick={() => setActiveProjectTab({ ...activeProjectTab, [proj.id]: tabItem.key as any })}
-                                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                                       currentTab === tabItem.key
-                                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs'
-                                        : 'text-slate-600 hover:text-slate-900 bg-slate-100 border border-slate-200'
+                                        ? 'bg-slate-900 text-white shadow-2xs'
+                                        : 'text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200'
                                     }`}
                                   >
                                     {tabItem.label}
@@ -635,26 +677,26 @@ export default function AdminDashboard() {
                               {currentTab === 'invoices' && (
                                 <div className="space-y-2 pt-1">
                                   {projInvoices.length === 0 ? (
-                                    <p className="text-xs text-slate-400 italic py-2">No invoices issued for this project.</p>
+                                    <p className="text-xs text-slate-400 italic py-2">No invoices generated for this project.</p>
                                   ) : (
                                     projInvoices.map((inv) => (
-                                      <div key={inv.id} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
+                                      <div key={inv.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
                                         <div>
                                           <div className="flex items-center gap-2">
                                             <span className="font-bold text-slate-900">{inv.invoice_number}</span>
-                                            <span className="text-emerald-700 font-semibold">₹{Number(inv.amount).toLocaleString()}</span>
+                                            <span className="text-emerald-700 font-bold">₹{Number(inv.amount).toLocaleString()}</span>
                                           </div>
-                                          <p className="text-[10px] text-slate-500">{inv.description || 'Milestone fee'}</p>
+                                          <p className="text-[10px] text-slate-500 mt-0.5">{inv.description || 'Milestone fee'}</p>
                                         </div>
                                         <button
                                           onClick={() => handleToggleInvoiceStatus(inv.id, inv.status)}
-                                          className={`px-2.5 py-1 rounded-md text-[10px] font-bold border transition-colors cursor-pointer ${
+                                          className={`px-3 py-1 rounded-md text-[10px] font-bold border transition-colors cursor-pointer ${
                                             inv.status === 'Paid'
                                               ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                                               : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-emerald-100'
                                           }`}
                                         >
-                                          {inv.status === 'Paid' ? '✓ Paid' : 'Mark as Paid'}
+                                          {inv.status === 'Paid' ? '✓ Paid' : 'Mark Paid'}
                                         </button>
                                       </div>
                                     ))
@@ -669,7 +711,7 @@ export default function AdminDashboard() {
                   )}
                 </div>
 
-                {/* Left Side Balanced: Financial Profitability Chart */}
+                {/* Financial Profitability Analytics Component */}
                 <FinancialProfitabilityAnalytics
                   projects={projects}
                   invoices={invoices}
@@ -677,14 +719,14 @@ export default function AdminDashboard() {
                 />
               </section>
 
-              {/* Right Column: CRM Leads, Feedbacks & Live Audit Trail (5 Cols) */}
+              {/* Right Column: CRM Leads, Feedbacks & Activity Center (5 Cols) */}
               <section className="lg:col-span-5 space-y-5">
                 
                 {/* CRM Lead Pipeline */}
-                <div className="bg-white border border-slate-200/90 rounded-xl p-5 space-y-3 shadow-xs">
+                <div className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-3 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                     <div className="flex items-center gap-2">
-                      <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">CRM Lead Pipeline</h2>
+                      <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Client Pipeline</h2>
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 font-semibold">
                         {inquiries.length} leads
                       </span>
@@ -698,7 +740,7 @@ export default function AdminDashboard() {
                       {inquiries.map((inq) => {
                         const isConverted = inq.status === 'Converted';
                         return (
-                          <div key={inq.id} className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs space-y-2">
+                          <div key={inq.id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-2">
                             <div className="flex items-start justify-between gap-2">
                               <div>
                                 <span className="font-bold text-slate-900">{inq.full_name || inq.name || 'Prospect'}</span>
@@ -712,7 +754,7 @@ export default function AdminDashboard() {
                             </div>
 
                             {inq.message && (
-                              <p className="text-[11px] text-slate-700 italic bg-white p-2 rounded border border-slate-200">
+                              <p className="text-[11px] text-slate-700 italic bg-white p-2 rounded-lg border border-slate-200">
                                 "{inq.message}"
                               </p>
                             )}
@@ -721,9 +763,9 @@ export default function AdminDashboard() {
                               <button
                                 onClick={() => handleConvertInquiry(inq)}
                                 disabled={convertingId === inq.id}
-                                className="w-full py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-[11px] font-bold transition-all shadow-2xs cursor-pointer"
+                                className="w-full py-2 bg-slate-900 hover:bg-black text-white rounded-lg text-[11px] font-bold transition-all shadow-xs cursor-pointer"
                               >
-                                {convertingId === inq.id ? 'Converting...' : '⚡ Convert to Client & Launch Project'}
+                                {convertingId === inq.id ? 'Launching...' : '⚡ Convert to Client & Create Project'}
                               </button>
                             )}
                           </div>
@@ -733,10 +775,10 @@ export default function AdminDashboard() {
                   )}
                 </div>
 
-                {/* Client Feedbacks */}
-                <div className="bg-white border border-slate-200/90 rounded-xl p-5 space-y-3 shadow-xs">
+                {/* Client Feedback Feed */}
+                <div className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-3 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Client Feedbacks</h2>
+                    <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Client Feedbacks</h2>
                     <span className="text-[10px] font-mono font-semibold text-emerald-700">{feedbacks.length} notes</span>
                   </div>
 
@@ -745,7 +787,7 @@ export default function AdminDashboard() {
                   ) : (
                     <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
                       {feedbacks.map((fb) => (
-                        <div key={fb.id} className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs space-y-1">
+                        <div key={fb.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
                           <p className="text-slate-800">"{fb.message}"</p>
                           <span className="text-[10px] text-slate-500 block">
                             {new Date(fb.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Project #{fb.project_id}
@@ -756,11 +798,11 @@ export default function AdminDashboard() {
                   )}
                 </div>
 
-                {/* Studio Audit Trail */}
-                <div className="bg-white border border-slate-200/90 rounded-xl p-5 space-y-3 shadow-xs">
+                {/* Activity Center (Studio Audit Trail) */}
+                <div className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-3 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Studio Audit Trail</h2>
-                    <span className="text-[10px] font-mono text-slate-400">Live feed</span>
+                    <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Activity Center</h2>
+                    <span className="text-[10px] font-mono text-slate-400">Real-time Feed</span>
                   </div>
 
                   {activityLogs.length === 0 ? (
@@ -768,7 +810,7 @@ export default function AdminDashboard() {
                   ) : (
                     <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1 font-mono text-[11px]">
                       {activityLogs.map((log) => (
-                        <div key={log.id} className="p-2 rounded bg-slate-50 border border-slate-200 text-slate-700 flex items-start gap-2">
+                        <div key={log.id} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 flex items-start gap-2">
                           <span className="text-emerald-600 font-bold shrink-0">●</span>
                           <div className="min-w-0">
                             <p className="truncate">{log.action}</p>
@@ -784,17 +826,17 @@ export default function AdminDashboard() {
 
             </div>
 
-            {/* Middle Section: Team Capacity Heatmap & Notice Publisher */}
-            <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 border-t border-slate-200 pt-7">
+            {/* Middle Section: People / Team Capacity Heatmap & Broadcast Publisher */}
+            <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 border-t border-slate-200 pt-8">
               
-              {/* Team Capacity Heatmap (8 Cols) */}
-              <div className="lg:col-span-8 bg-white border border-slate-200/90 rounded-xl p-5 space-y-4 shadow-xs">
+              {/* People & Team Capacity (8 Cols) */}
+              <div className="lg:col-span-8 bg-white border border-slate-200/90 rounded-2xl p-5 space-y-4 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div>
-                    <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Team Capacity & Workload Heatmap</h2>
-                    <p className="text-xs text-slate-500">Real-time allocation and project loads</p>
+                    <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">People & Team Capacity</h2>
+                    <p className="text-xs text-slate-500">Real-time task load distribution across departments</p>
                   </div>
-                  <span className="text-xs font-mono text-slate-500 font-semibold">{employees.length} Studio Leads</span>
+                  <span className="text-xs font-mono text-slate-500 font-semibold">{employees.length} Team Members</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -803,19 +845,19 @@ export default function AdminDashboard() {
                     const isBusy = assignedProjs.length > 0;
 
                     return (
-                      <div key={emp.id} className="p-3 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between">
+                      <div key={emp.id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-xs text-slate-900 truncate">{emp.full_name || 'Member'}</span>
-                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-white text-slate-600 border border-slate-200">{emp.role}</span>
+                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-white text-slate-600 border border-slate-200 uppercase">{emp.role}</span>
                           </div>
-                          <p className="text-[10px] text-slate-500 truncate">{emp.email}</p>
+                          <p className="text-[10px] text-slate-500 truncate mt-0.5">{emp.email}</p>
                         </div>
                         <div className="text-right shrink-0">
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                             isBusy ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                           }`}>
-                            {isBusy ? `${assignedProjs.length} Active` : 'Available'}
+                            {isBusy ? `${assignedProjs.length} Active Workflows` : 'Available'}
                           </span>
                         </div>
                       </div>
@@ -825,36 +867,39 @@ export default function AdminDashboard() {
               </div>
 
               {/* Broadcast Notice Publisher (4 Cols) */}
-              <div className="lg:col-span-4 bg-white border border-slate-200/90 rounded-xl p-5 space-y-4 shadow-xs">
+              <div className="lg:col-span-4 bg-white border border-slate-200/90 rounded-2xl p-5 space-y-4 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
                 <div className="border-b border-slate-100 pb-3">
-                  <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Broadcast Notice</h2>
-                  <p className="text-xs text-slate-500">Publish global banner to all workspace portals</p>
+                  <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Broadcast Announcement</h2>
+                  <p className="text-xs text-slate-500">Publish immediate notice to all connected portals</p>
                 </div>
 
                 <form onSubmit={handlePostAnnouncement} className="space-y-3">
                   <textarea
                     rows={3}
                     required
-                    placeholder="e.g. Design sprint review scheduled for 5 PM."
+                    placeholder="e.g. System maintenance sprint planned for Friday 10 PM."
                     value={newAnnouncement}
                     onChange={(e) => setNewAnnouncement(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white transition-all"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white transition-all"
                   />
                   <button
                     type="submit"
                     disabled={broadcasting}
-                    className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-all shadow-xs cursor-pointer"
+                    className="w-full py-2.5 bg-slate-900 hover:bg-black text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer active:scale-95"
                   >
-                    {broadcasting ? 'Broadcasting...' : '📢 Publish Notice'}
+                    {broadcasting ? 'Publishing...' : '📢 Broadcast Notice'}
                   </button>
                 </form>
               </div>
 
             </section>
 
-            {/* Bottom Section: Automation Engine & Portfolio Case Studies */}
-            <section className="space-y-7 border-t border-slate-200 pt-7">
+            {/* Bottom Section: Automation Center & Portfolio Case Studies */}
+            <section id="automation-center" className="space-y-8 border-t border-slate-200 pt-8">
               <AutomationCenter />
+            </section>
+
+            <section id="portfolio-showcase" className="space-y-8 border-t border-slate-200 pt-8">
               <PortfolioShowcase projects={projects.filter((p) => p.status === 'Completed' || p.progress === 100)} />
             </section>
           </>
@@ -864,7 +909,7 @@ export default function AdminDashboard() {
       {/* Modal: Create Invoice */}
       {showInvoiceModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-xl p-6 w-full max-w-md shadow-xl space-y-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="text-sm font-bold text-slate-900">Generate Client Invoice</h3>
               <button onClick={() => setShowInvoiceModal(false)} className="text-slate-400 hover:text-slate-600 text-xs cursor-pointer">✕</button>
@@ -880,7 +925,7 @@ export default function AdminDashboard() {
                     const selProj = projects.find((p) => String(p.id) === e.target.value);
                     setNewInvoice({ ...newInvoice, project_id: e.target.value, client_id: selProj?.client_id || '' });
                   }}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                 >
                   <option value="">Select Project</option>
                   {projects.map((p) => (
@@ -897,7 +942,7 @@ export default function AdminDashboard() {
                   placeholder="e.g. 25000"
                   value={newInvoice.amount}
                   onChange={(e) => setNewInvoice({ ...newInvoice, amount: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                 />
               </div>
 
@@ -907,7 +952,7 @@ export default function AdminDashboard() {
                   type="date"
                   value={newInvoice.due_date}
                   onChange={(e) => setNewInvoice({ ...newInvoice, due_date: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                 />
               </div>
 
@@ -915,18 +960,18 @@ export default function AdminDashboard() {
                 <label className="block text-[11px] font-semibold text-slate-600 mb-1">Description / Milestone</label>
                 <input
                   type="text"
-                  placeholder="e.g. 50% Advance Milestone Fee"
+                  placeholder="e.g. Phase 1 Sprint Deliverable"
                   value={newInvoice.description}
                   onChange={(e) => setNewInvoice({ ...newInvoice, description: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                 />
               </div>
 
               <div className="flex gap-2.5 pt-2">
-                <button type="button" onClick={() => setShowInvoiceModal(false)} className="flex-1 py-2 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 cursor-pointer">
+                <button type="button" onClick={() => setShowInvoiceModal(false)} className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 cursor-pointer">
                   Cancel
                 </button>
-                <button type="submit" disabled={creatingInvoice} className="flex-1 py-2 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs cursor-pointer">
+                <button type="submit" disabled={creatingInvoice} className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white bg-slate-950 hover:bg-black shadow-xs cursor-pointer">
                   {creatingInvoice ? 'Issuing...' : 'Issue Invoice'}
                 </button>
               </div>
@@ -938,9 +983,9 @@ export default function AdminDashboard() {
       {/* Modal: Create User */}
       {showUserModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-xl p-6 w-full max-w-md shadow-xl space-y-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-slate-900">Create Account</h3>
+              <h3 className="text-sm font-bold text-slate-900">Provision User Account</h3>
               <button onClick={() => setShowUserModal(false)} className="text-slate-400 hover:text-slate-600 text-xs cursor-pointer">✕</button>
             </div>
 
@@ -953,7 +998,7 @@ export default function AdminDashboard() {
                   placeholder="e.g. Rahul Sharma"
                   value={newUser.fullName}
                   onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                 />
               </div>
 
@@ -965,7 +1010,7 @@ export default function AdminDashboard() {
                   placeholder="name@example.com"
                   value={newUser.email}
                   onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                 />
               </div>
 
@@ -978,18 +1023,18 @@ export default function AdminDashboard() {
                   placeholder="••••••••"
                   value={newUser.password}
                   onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Role</label>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Role & Permissions</label>
                 <select
                   value={newUser.role}
                   onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                 >
-                  <option value="client">Client</option>
+                  <option value="client">Client (External Portal)</option>
                   <option value="director">Director</option>
                   <option value="senior_manager">Senior Manager</option>
                   <option value="manager">Manager</option>
@@ -999,11 +1044,11 @@ export default function AdminDashboard() {
               </div>
 
               <div className="flex gap-2.5 pt-2">
-                <button type="button" onClick={() => setShowUserModal(false)} className="flex-1 py-2 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 cursor-pointer">
+                <button type="button" onClick={() => setShowUserModal(false)} className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 cursor-pointer">
                   Cancel
                 </button>
-                <button type="submit" disabled={creatingUser} className="flex-1 py-2 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs cursor-pointer">
-                  {creatingUser ? 'Creating...' : 'Create Account'}
+                <button type="submit" disabled={creatingUser} className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white bg-slate-950 hover:bg-black shadow-xs cursor-pointer">
+                  {creatingUser ? 'Provisioning...' : 'Provision User'}
                 </button>
               </div>
             </form>
@@ -1014,32 +1059,32 @@ export default function AdminDashboard() {
       {/* Modal: Create Project */}
       {showProjectModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-xl p-6 w-full max-w-lg shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 w-full max-w-lg shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-slate-900">Create New Project</h3>
+              <h3 className="text-sm font-bold text-slate-900">Initiate New Project</h3>
               <button onClick={() => setShowProjectModal(false)} className="text-slate-400 hover:text-slate-600 text-xs cursor-pointer">✕</button>
             </div>
 
             <form onSubmit={handleCreateProject} className="space-y-3.5">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Title</label>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Project Name</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Brand Identity & Web App"
+                  placeholder="e.g. Enterprise Cloud Redesign"
                   value={newProject.title}
                   onChange={(e) => setNewProject({ ...newProject, title: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Client</label>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Client Portal</label>
                   <select
                     value={newProject.client_id}
                     onChange={(e) => setNewProject({ ...newProject, client_id: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                   >
                     <option value="">Select Client</option>
                     {clients.map((c) => (
@@ -1048,13 +1093,13 @@ export default function AdminDashboard() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Lead</label>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Task Owner (Lead)</label>
                   <select
                     value={newProject.assigned_to}
                     onChange={(e) => setNewProject({ ...newProject, assigned_to: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                   >
-                    <option value="">Select Member</option>
+                    <option value="">Select Team Member</option>
                     {employees.map((e) => (
                       <option key={e.id} value={e.id}>{e.full_name || e.email} ({e.role})</option>
                     ))}
@@ -1064,16 +1109,15 @@ export default function AdminDashboard() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Status</label>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Lifecycle Status</label>
                   <select
                     value={newProject.status}
                     onChange={(e) => setNewProject({ ...newProject, status: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                   >
-                    <option value="Not Started">Not Started</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Under Review">Under Review</option>
-                    <option value="Completed">Completed</option>
+                    {PROJECT_STATUSES.map((status) => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -1084,39 +1128,39 @@ export default function AdminDashboard() {
                     max="10"
                     value={newProject.max_revisions}
                     onChange={(e) => setNewProject({ ...newProject, max_revisions: Number(e.target.value) })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Pending Task</label>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Current Milestone / Blocker</label>
                 <input
                   type="text"
-                  placeholder="e.g. Requirement intake and initial mockups"
+                  placeholder="e.g. Scope Discovery & Tech Architecture"
                   value={newProject.pending_tasks}
                   onChange={(e) => setNewProject({ ...newProject, pending_tasks: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Preview URL</label>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Live Preview URL</label>
                 <input
                   type="url"
-                  placeholder="https://preview.askusstudio.com"
+                  placeholder="https://staging.example.com"
                   value={newProject.preview_url}
                   onChange={(e) => setNewProject({ ...newProject, preview_url: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                 />
               </div>
 
               <div className="flex gap-2.5 pt-2">
-                <button type="button" onClick={() => setShowProjectModal(false)} className="flex-1 py-2 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 cursor-pointer">
+                <button type="button" onClick={() => setShowProjectModal(false)} className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 cursor-pointer">
                   Cancel
                 </button>
-                <button type="submit" disabled={creatingProject} className="flex-1 py-2 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs cursor-pointer">
-                  {creatingProject ? 'Saving...' : 'Publish Project'}
+                <button type="submit" disabled={creatingProject} className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white bg-slate-950 hover:bg-black shadow-xs cursor-pointer">
+                  {creatingProject ? 'Launching...' : 'Deploy Project'}
                 </button>
               </div>
             </form>
@@ -1127,31 +1171,31 @@ export default function AdminDashboard() {
       {/* Modal: Edit Project */}
       {editingProject && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-xl p-6 w-full max-w-lg shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 w-full max-w-lg shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-slate-900">Edit Project #{editingProject.id}</h3>
+              <h3 className="text-sm font-bold text-slate-900">Manage Project #{editingProject.id}</h3>
               <button onClick={() => setEditingProject(null)} className="text-slate-400 hover:text-slate-600 text-xs cursor-pointer">✕</button>
             </div>
 
             <form onSubmit={handleUpdateProject} className="space-y-3.5">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Project Title</label>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Project Name</label>
                 <input
                   type="text"
                   required
                   value={editingProject.title}
                   onChange={(e) => setEditingProject({ ...editingProject, title: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Sign-off Status</label>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Sign-off Approval</label>
                   <select
                     value={editingProject.client_signoff || 'Pending'}
                     onChange={(e) => setEditingProject({ ...editingProject, client_signoff: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                   >
                     <option value="Pending">Pending Review</option>
                     <option value="Approved">Approved & Signed Off</option>
@@ -1159,28 +1203,27 @@ export default function AdminDashboard() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Revisions Used</label>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Revisions Logged</label>
                   <input
                     type="number"
                     value={editingProject.used_revisions || 0}
                     onChange={(e) => setEditingProject({ ...editingProject, used_revisions: Number(e.target.value) })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Status</label>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Lifecycle Status</label>
                   <select
                     value={editingProject.status}
                     onChange={(e) => setEditingProject({ ...editingProject, status: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                   >
-                    <option value="Not Started">Not Started</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Under Review">Under Review</option>
-                    <option value="Completed">Completed</option>
+                    {PROJECT_STATUSES.map((status) => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -1191,28 +1234,28 @@ export default function AdminDashboard() {
                     max="100"
                     value={editingProject.progress}
                     onChange={(e) => setEditingProject({ ...editingProject, progress: Number(e.target.value) })}
-                    className="w-full accent-emerald-600 mt-2 cursor-pointer"
+                    className="w-full accent-slate-900 mt-2 cursor-pointer"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Pending Task</label>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Current Milestone / Action Item</label>
                 <input
                   type="text"
                   value={editingProject.pending_tasks || ''}
                   onChange={(e) => setEditingProject({ ...editingProject, pending_tasks: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Preview URL</label>
+                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Live Preview URL</label>
                 <input
                   type="url"
                   value={editingProject.preview_url || ''}
                   onChange={(e) => setEditingProject({ ...editingProject, preview_url: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
                 />
               </div>
 
@@ -1225,10 +1268,10 @@ export default function AdminDashboard() {
                   Delete Project
                 </button>
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => setEditingProject(null)} className="py-2 px-4 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 cursor-pointer">
+                  <button type="button" onClick={() => setEditingProject(null)} className="py-2.5 px-4 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 cursor-pointer">
                     Cancel
                   </button>
-                  <button type="submit" disabled={updating} className="py-2 px-5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-xs cursor-pointer">
+                  <button type="submit" disabled={updating} className="py-2.5 px-5 rounded-xl text-xs font-bold text-white bg-slate-950 hover:bg-black shadow-xs cursor-pointer">
                     {updating ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>

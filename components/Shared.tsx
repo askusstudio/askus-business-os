@@ -55,7 +55,7 @@ export const Nav = () => {
           </a>
         </div>
 
-        {/* Center Links */}
+        {/* Center Links (Header clean: WORKS | SERVICES | ABOUT | OUR PRODUCT) */}
         <div className="hidden lg:flex items-center gap-8 lg:gap-10">
           <a
             href="/#work"
@@ -74,26 +74,27 @@ export const Nav = () => {
 
             <div className="absolute top-full left-0 hidden group-hover:block w-64 pt-2 z-50">
               <div className="bg-[#111111] text-white rounded-2xl p-2 shadow-2xl border border-white/10 flex flex-col gap-1">
+                {/* Marketing Solutions Direct Page */}
                 <a
-                  href="/#marketing-card"
-                  onClick={(e) => scrollToSection(e, 'marketing-card')}
+                  href="/marketing-solutions"
                   className="px-4 py-2.5 rounded-xl text-sm font-semibold text-neutral-200 hover:text-black hover:bg-[#C8FF91] transition-all"
                 >
                   Marketing solutions
                 </a>
+                {/* Tech Solutions Direct Page */}
                 <a
-                  href="/#tech-card"
-                  onClick={(e) => scrollToSection(e, 'tech-card')}
+                  href="/tech-solutions"
                   className="px-4 py-2.5 rounded-xl text-sm font-semibold text-neutral-200 hover:text-black hover:bg-[#C8FF91] transition-all"
                 >
                   Tech solutions
                 </a>
+                {/* Legal Solutions Direct Page */}
                 <a
-                  href="/#legal-card"
-                  onClick={(e) => scrollToSection(e, 'legal-card')}
-                  className="px-4 py-2.5 rounded-xl text-sm font-semibold text-neutral-200 hover:text-black hover:bg-[#C8FF91] transition-all"
+                  href="/legal-solutions"
+                  className="px-4 py-2.5 rounded-xl text-sm font-semibold text-neutral-200 hover:text-black hover:bg-[#C8FF91] transition-all flex items-center justify-between"
                 >
-                  Legal solutions
+                  <span>Legal solutions</span>
+                  <span className="text-[10px] bg-[#C8FF91] text-black px-1.5 py-0.5 rounded font-bold">New</span>
                 </a>
                 <div className="flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium text-neutral-500 bg-white/[0.03]">
                   <span>Funding solutions</span>
@@ -205,32 +206,23 @@ export const Nav = () => {
                 {mobileServicesOpen && (
                   <div className="flex flex-col gap-3 pl-4 pt-3 border-l-2 border-[#C8FF91]/30 mt-2">
                     <a
-                      href="/#marketing-card"
-                      onClick={(e) => {
-                        scrollToSection(e, 'marketing-card');
-                        setIsOpen(false);
-                      }}
+                      href="/marketing-solutions"
+                      onClick={() => setIsOpen(false)}
                       className="text-lg font-semibold text-neutral-300 hover:text-white"
                     >
                       Marketing solutions
                     </a>
                     <a
-                      href="/#tech-card"
-                      onClick={(e) => {
-                        scrollToSection(e, 'tech-card');
-                        setIsOpen(false);
-                      }}
+                      href="/tech-solutions"
+                      onClick={() => setIsOpen(false)}
                       className="text-lg font-semibold text-neutral-300 hover:text-white"
                     >
                       Tech solutions
                     </a>
                     <a
-                      href="/#legal-card"
-                      onClick={(e) => {
-                        scrollToSection(e, 'legal-card');
-                        setIsOpen(false);
-                      }}
-                      className="text-lg font-semibold text-neutral-300 hover:text-white"
+                      href="/legal-solutions"
+                      onClick={() => setIsOpen(false)}
+                      className="text-lg font-semibold text-[#C8FF91] hover:text-white"
                     >
                       Legal solutions
                     </a>
@@ -251,6 +243,7 @@ export const Nav = () => {
               >
                 OUR PRODUCT
               </a>
+
               <a
                 href="/#agency"
                 onClick={(e) => {
@@ -397,6 +390,7 @@ export const Footer = () => {
             <h4 className="text-white font-bold text-base mb-4 tracking-wide">Quick Links</h4>
             {[
               { label: "About Us", href: "/#about" },
+              { label: "Legal Solutions", href: "/legal-solutions" },
               { label: "Contact Us", href: "#", onClick: true },
               { label: "Portfolio", href: "/#work" },
               { label: "Privacy & Policy", href: "/privacy-policy" },
