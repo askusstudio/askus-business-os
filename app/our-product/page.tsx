@@ -6,7 +6,7 @@ import { Nav, Footer, FloatingCallButton } from '@/components/Shared';
 import { supabase } from '@/lib/supabase';
 
 // Direct 1:1 mapping — every card title has its own unique, relevant image
-const IMG = (id: string) => `https://images.unsplash.com/photo-${id}?w=800&fit=crop&q=80`;
+const IMG = (id: string) => `https://images.unsplash.com/photo-${id}?w=600&fit=crop&q=75`;
 const IMAGE_MAP: Record<string, string> = {
   // Featured
   "Custom Softwares Development": IMG("1498050108023-c5249f4df085"),
@@ -112,14 +112,14 @@ const featuredCards = [
   { title: "Website Designing", label: "website development company in India", tag: "technology", techs: "HTML, CSS, JavaScript, Tailwind CSS, Bootstrap, React.js", time: "16 Days" },
   { title: "Digital Marketing", label: "digital marketing company in India", tag: "technology", techs: "Google Ads, Facebook Ads, SEO, Analytics, HubSpot", time: "12 Days" },
   { title: "Maintenance & Consultancy", label: "best it company in India", tag: "technology", techs: "Jira, ServiceNow, Git, Docker, Kubernetes", time: "13 Days" },
-  { title: "IT Internship Program", label: "best it company in India", tag: "technology", techs: "Laravel, Node.js, PHP, Java Script, React J.S, Taiwind CSS", time: "35 Days" },
+  { title: "IT Internship Program", label: "best it company in India", tag: "technology", techs: "Laravel, Node.js, PHP, Java Script, React J.S, Tailwind CSS", time: "35 Days" },
 ];
 
 const categories = [
   {
     id: "custom-software",
     title: "Custom Software Development",
-    description: "Askus Software's, solutions are tailored industry-specific standards, solutions, and integration services through a unique onsite, offsite, off-shore delivery model",
+    description: "Tailored industry-specific standards, solutions, and integration services through a unique delivery model.",
     items: [
       { title: "Hostel Management Software", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, Python, C#, Java", time: "18-24 Days" },
       { title: "Online Exam Software", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, Python, C#, Java", time: "16-20 Days" },
@@ -127,36 +127,36 @@ const categories = [
       { title: "HRM Software", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, Python, C#, Java", time: "18-22 Days" },
       { title: "Payroll Generation Software", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, Python, C#, Java", time: "16-20 Days" },
       { title: "Inventory Management Software", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, Python, C#, Java", time: "20-24 Days" },
-      { title: "E-Commerce Platform", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, Java Script, tailwind CSS, React J.S", time: "22-28 Days" },
-      { title: "CRM System", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, Java Script, tailwind CSS, React J.S", time: "18-22 Days" },
-      { title: "Learning Management System", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, Java Script, tailwind CSS, React J.S", time: "24-30 Days" },
+      { title: "E-Commerce Platform", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, JavaScript, Tailwind CSS, React.js", time: "22-28 Days" },
+      { title: "CRM System", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, JavaScript, Tailwind CSS, React.js", time: "18-22 Days" },
+      { title: "Learning Management System", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, JavaScript, Tailwind CSS, React.js", time: "24-30 Days" },
       { title: "Accounts/Billing Software", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, Python, C#, Java", time: "18-24 Days" },
       { title: "Factory Management Software", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, Python, C#, Java", time: "28-32 Days" },
-      { title: "Project Management Tool", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, Java Script, tailwind CSS, React J.S", time: "24-30 Days" },
+      { title: "Project Management Tool", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, JavaScript, Tailwind CSS, React.js", time: "24-30 Days" },
       { title: "Healthcare Management Software", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, Python, C#, Java", time: "24-30 Days" },
       { title: "Real Estate Management Software", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, Python, C#, Java", time: "26-32 Days" },
-      { title: "Transport Management", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, Java Script, tailwind CSS, React J.S", time: "10-12 days" },
-      { title: "Crypto-Based Software", label: "best software company in India", tag: "Technology", techs: "Solidity,Rust, C++, Python, JavaScript/TypeScript, Go", time: "12-16 Days" },
+      { title: "Transport Management", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, JavaScript, Tailwind CSS, React.js", time: "10-12 days" },
+      { title: "Crypto-Based Software", label: "best software company in India", tag: "Technology", techs: "Solidity, Rust, C++, Python, TypeScript, Go", time: "12-16 Days" },
       { title: "MLM Software", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, Python, C#, Java", time: "8-10 Days" },
       { title: "E-Reception Software", label: "best software company in India", tag: "Technology", techs: "Laravel, Node.js, PHP, Python, C#, Java", time: "6-8 Days" },
-      { title: "Multi-Vendor Marketplace", label: "best software company in India", tag: "system", techs: "Laravel, Node.js, PHP, Java Script, tailwind CSS, React J.S", time: "6-9 months" },
-      { title: "Smart Parking System", label: "best software company in India", tag: "system", techs: "Python, Java, JavaScript/TypeScript, C/C++, React J.S", time: "6-8 Days" },
-      { title: "News Portal Development", label: "best software company in India", tag: "platform", techs: "Python, Java, JavaScript/TypeScript, C/C++, React J.S", time: "3-6 Days" },
-      { title: "Advocate Management System", label: "best software company in India", tag: "solution", techs: "Python, Java, JavaScript/TypeScript, C/C++, React J.S", time: "4-6 Days" },
-      { title: "CRM Development", label: "best software company in India", tag: "platform", techs: "Python, Java, JavaScript/TypeScript, C/C++, React J.S", time: "6-9 Days" },
-      { title: "Mortuary Management Software", label: "best software company in India", tag: "technology", techs: "Python, Java, JavaScript/TypeScript, C/C++, React J.S", time: "4-6 days" },
-      { title: "University Management", label: "best software company in India", tag: "FEATURES", techs: "Python, Java, JavaScript/TypeScript, C/C++, React J.S", time: "12-16 Days" },
-      { title: "E-Learning", label: "best software company in India", tag: "FEATURES", techs: "Python, Java, JavaScript/TypeScript, C/C++, React J.S", time: "10-14 days" },
-      { title: "Laboratory", label: "best software company in India", tag: "technology", techs: "Python, Java, JavaScript/TypeScript, C/C++, React J.S", time: "12-16 days" },
-      { title: "Blood Bank", label: "best software company in India", tag: "technology", techs: "Python, Java, JavaScript/TypeScript, C/C++, React J.S", time: "18-22 Days" },
-      { title: "Digital Hospital", label: "best software company in India", tag: "technology", techs: "Python, Java, JavaScript/TypeScript, C/C++, React J.S", time: "20-24 Days" },
-      { title: "Pharmacy", label: "best software company in India", tag: "technology", techs: "Python, Java, JavaScript/TypeScript, C/C++, React J.S", time: "10-14 days" },
+      { title: "Multi-Vendor Marketplace", label: "best software company in India", tag: "system", techs: "Laravel, Node.js, PHP, JavaScript, Tailwind CSS, React.js", time: "6-9 months" },
+      { title: "Smart Parking System", label: "best software company in India", tag: "system", techs: "Python, Java, JavaScript, C/C++, React.js", time: "6-8 Days" },
+      { title: "News Portal Development", label: "best software company in India", tag: "platform", techs: "Python, Java, JavaScript, C/C++, React.js", time: "3-6 Days" },
+      { title: "Advocate Management System", label: "best software company in India", tag: "solution", techs: "Python, Java, JavaScript, C/C++, React.js", time: "4-6 Days" },
+      { title: "CRM Development", label: "best software company in India", tag: "platform", techs: "Python, Java, JavaScript, C/C++, React.js", time: "6-9 Days" },
+      { title: "Mortuary Management Software", label: "best software company in India", tag: "technology", techs: "Python, Java, JavaScript, C/C++, React.js", time: "4-6 days" },
+      { title: "University Management", label: "best software company in India", tag: "FEATURES", techs: "Python, Java, JavaScript, C/C++, React.js", time: "12-16 Days" },
+      { title: "E-Learning", label: "best software company in India", tag: "FEATURES", techs: "Python, Java, JavaScript, C/C++, React.js", time: "10-14 days" },
+      { title: "Laboratory", label: "best software company in India", tag: "technology", techs: "Python, Java, JavaScript, C/C++, React.js", time: "12-16 days" },
+      { title: "Blood Bank", label: "best software company in India", tag: "technology", techs: "Python, Java, JavaScript, C/C++, React.js", time: "18-22 Days" },
+      { title: "Digital Hospital", label: "best software company in India", tag: "technology", techs: "Python, Java, JavaScript, C/C++, React.js", time: "20-24 Days" },
+      { title: "Pharmacy", label: "best software company in India", tag: "technology", techs: "Python, Java, JavaScript, C/C++, React.js", time: "10-14 days" },
     ]
   },
   {
     id: "app-development",
-    title: "ANDROID/iOS APP DEVELOPMENT",
-    description: "At Askus studio, we push the boundaries of mobile app development. From native to cross-platform solutions, we craft apps that will shape the future. Our team brings your vision to life with innovative, secure, and scalable solutions.",
+    title: "Android/iOS App Development",
+    description: "From native iOS/Android to fluid cross-platform apps, we craft scalable mobile architectures.",
     items: [
       { title: "Native Android/iOS App Development", label: "app development company in India", tag: "technology", techs: "Java, Kotlin, Swift, React Native, Dart (Flutter)", time: "24 Days" },
       { title: "Cross-Platform App Development", label: "app development company in India", tag: "technology", techs: "Java, Kotlin, Swift, React Native, Dart (Flutter)", time: "18 Days" },
@@ -172,7 +172,7 @@ const categories = [
   {
     id: "web-design",
     title: "Website Designing & Development",
-    description: "Step into the future of digital experiences with Askus studio's web design solutions. Our team combines futuristic design principles with cutting-edge technologies to deliver responsive, immersive, and highly engaging websites.",
+    description: "Responsive, immersive, and high-performance websites optimized for search and conversion.",
     items: [
       { title: "Custom Website Design", label: "website development company in India", tag: "technology", techs: "HTML, CSS, JavaScript, Tailwind CSS, Bootstrap, React.js", time: "16-18 week" },
       { title: "E-commerce Website Design", label: "website development company in India", tag: "technology", techs: "HTML, CSS, JavaScript, Tailwind CSS, Bootstrap, React.js", time: "28-29 Days" },
@@ -193,8 +193,8 @@ const categories = [
   },
   {
     id: "marketing",
-    title: "Digital Marketing by Askus studio",
-    description: "Unlock the power of tomorrow's marketing today. At Askus studio, we specialize in digital marketing strategies that are as dynamic and cutting-edge as your business.",
+    title: "Digital Marketing by AskUs Studio",
+    description: "Data-backed SEO, Google/Meta PPC campaigns, and conversion optimization.",
     items: [
       { title: "Search Engine Optimization (SEO)", label: "digital marketing company in India", tag: "strategy", techs: "Google Ads, Facebook Ads, SEO, Analytics, HubSpot", time: "23-26 Days" },
       { title: "Pay-Per-Click Advertising (PPC)", label: "digital marketing company in India", tag: "strategy", techs: "Google Ads, Facebook Ads, SEO, Analytics, HubSpot", time: "22-24 Days" },
@@ -212,31 +212,31 @@ const categories = [
   },
   {
     id: "internships",
-    title: "IT INTERNSHIP PROGRAM",
-    description: "At Askus studio, our Internship Programs are designed to nurture the next generation of tech leaders. Immerse yourself in real-world projects, advanced technologies, and cutting-edge methodologies.",
+    title: "IT Internship Program",
+    description: "Hands-on engineering internships on production applications under senior developers.",
     items: [
       { title: "Software Development Internship", label: "best it company in India", tag: "Skills Acquired", techs: "Laravel, Node.js, PHP, Python, C#, Java", time: "6 months" },
-      { title: "Data Science Internship", label: "best it company in India", tag: "Skills Acquired", techs: "Python, SQL, Java, Scala, Julia, MATLAB,SAS", time: "7 months" },
-      { title: "Cloud Computing Internship", label: "best it company in India", tag: "Skills Acquired", techs: "Python, Java, JavaScript (Node.js), C#, Go (Golang),Ruby", time: "6 months" },
-      { title: "Cybersecurity Internship", label: "best it company in India", tag: "Skills Acquired", techs: "Python, C/C++, JavaScript, Java, Bash/Shell Scripting, SQL, PHP", time: "6 months" },
+      { title: "Data Science Internship", label: "best it company in India", tag: "Skills Acquired", techs: "Python, SQL, Java, Scala, Julia, MATLAB, SAS", time: "7 months" },
+      { title: "Cloud Computing Internship", label: "best it company in India", tag: "Skills Acquired", techs: "Python, Java, Node.js, C#, Go, Ruby", time: "6 months" },
+      { title: "Cybersecurity Internship", label: "best it company in India", tag: "Skills Acquired", techs: "Python, C/C++, JavaScript, Java, Bash, SQL, PHP", time: "6 months" },
     ]
   },
   {
     id: "training",
     title: "Master IT Skills",
-    description: "At Askus studios, we offer industry-leading IT training programs to help you master the most in-demand technologies. Learn from experienced instructors and get hands-on experience.",
+    description: "Industry-aligned hands-on training programs taught by experienced software practitioners.",
     items: [
-      { title: ".NET Development", desc: "Learn to build robust, scalable, and secure applications using the .NET framework.", tag: "Course", techs: "C#, ASP.NET, MVC", time: "Flexible" },
-      { title: "Angular Framework", desc: "Master Angular to develop dynamic, responsive web applications.", tag: "Course", techs: "TypeScript, Angular CLI, RxJS", time: "Flexible" },
-      { title: "React.js Development", desc: "Learn React.js to create fast and efficient front-end applications.", tag: "Course", techs: "JSX, React, Redux", time: "Flexible" },
-      { title: "PHP, HTML & Laravel", desc: "Dive into web development with PHP and HTML, and build powerful web applications using Laravel.", tag: "Course", techs: "PHP, HTML, Laravel", time: "Flexible" },
-      { title: "Node.js", desc: "Learn Node.js for back-end development and create high-performance server-side applications.", tag: "Course", techs: "Node.js, Express, APIs", time: "Flexible" },
-      { title: "C++ and Java", desc: "Enhance your programming skills with C++ and Java. Learn object-oriented programming.", tag: "Course", techs: "C++, Java", time: "Flexible" },
+      { title: ".NET Development", desc: "Build enterprise applications using .NET and C#.", tag: "Course", techs: "C#, ASP.NET, MVC", time: "Flexible" },
+      { title: "Angular Framework", desc: "Develop dynamic web applications with Angular.", tag: "Course", techs: "TypeScript, Angular CLI, RxJS", time: "Flexible" },
+      { title: "React.js Development", desc: "Fast front-end architectures with modern React.", tag: "Course", techs: "JSX, React, Redux, Next.js", time: "Flexible" },
+      { title: "PHP, HTML & Laravel", desc: "Build robust full-stack web applications.", tag: "Course", techs: "PHP, HTML, Laravel", time: "Flexible" },
+      { title: "Node.js", desc: "Create high-performance server-side APIs.", tag: "Course", techs: "Node.js, Express, APIs", time: "Flexible" },
+      { title: "C++ and Java", desc: "Master core algorithms and object-oriented systems.", tag: "Course", techs: "C++, Java", time: "Flexible" },
     ]
   }
 ];
 
-// Inquiry Modal
+// Inquiry Modal (Redirects & logs to WhatsApp & Supabase)
 const InquiryModal = ({ isOpen, onClose, productTitle }: { isOpen: boolean, onClose: () => void, productTitle: string }) => {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -253,7 +253,8 @@ const InquiryModal = ({ isOpen, onClose, productTitle }: { isOpen: boolean, onCl
     setErrorMsg('');
 
     try {
-      const { error } = await supabase.from('inquiries').insert([
+      // 1. Log to Supabase
+      await supabase.from('inquiries').insert([
         {
           name: form.name,
           email: form.email,
@@ -263,14 +264,23 @@ const InquiryModal = ({ isOpen, onClose, productTitle }: { isOpen: boolean, onCl
         },
       ]);
 
-      if (error) throw error;
+      // 2. Direct WhatsApp redirection
+      const whatsappNumber = '918009227002';
+      const textMsg = `*New Product Inquiry - AskUs Studio*%0A%0A` +
+        `*Product:* ${encodeURIComponent(productTitle)}%0A` +
+        `*Name:* ${encodeURIComponent(form.name)}%0A` +
+        `*Phone:* ${encodeURIComponent(form.phone)}%0A` +
+        `*Email:* ${encodeURIComponent(form.email)}%0A` +
+        `*Requirements:* ${encodeURIComponent(form.message || 'N/A')}`;
+
+      window.open(`https://api.whatsapp.com/send?phone=${whatsappNumber}&text=${textMsg}`, '_blank');
 
       setSubmitted(true);
       setTimeout(() => {
         setSubmitted(false);
         setForm({ name: '', email: '', phone: '', subject: productTitle, message: '' });
         onClose();
-      }, 2500);
+      }, 2000);
     } catch (err: any) {
       setErrorMsg(err.message || 'Submission failed. Please try again.');
     } finally {
@@ -288,17 +298,17 @@ const InquiryModal = ({ isOpen, onClose, productTitle }: { isOpen: boolean, onCl
           className="fixed inset-0 z-[999] flex items-center justify-center px-4"
           onClick={onClose}
         >
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" />
           
           <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 30 }}
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 30 }}
-            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-            className="relative w-full max-w-lg bg-[#111] border border-white/10 rounded-3xl p-8 md:p-10 shadow-2xl max-h-[90vh] overflow-y-auto"
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            transition={{ duration: 0.25 }}
+            className="relative w-full max-w-md bg-[#121212] border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <button onClick={onClose} className="absolute top-5 right-5 w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors">
+            <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 transition-colors">
               <X className="w-4 h-4 text-white/70" />
             </button>
 
@@ -306,86 +316,80 @@ const InquiryModal = ({ isOpen, onClose, productTitle }: { isOpen: boolean, onCl
               <motion.div
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="flex flex-col items-center justify-center py-12 text-center"
+                className="flex flex-col items-center justify-center py-8 text-center"
               >
-                <CheckCircle2 className="w-16 h-16 text-emerald-400 mb-6" />
-                <h3 className="text-2xl font-bold text-white mb-3">Submitted Successfully!</h3>
-                <p className="text-neutral-400 text-sm">We&apos;ll get back to you shortly regarding <span className="text-white font-medium">{productTitle}</span></p>
+                <CheckCircle2 className="w-12 h-12 text-[#C8FF91] mb-4" />
+                <h3 className="text-xl font-bold text-white mb-2">Inquiry Forwarded!</h3>
+                <p className="text-neutral-400 text-xs">Connecting to WhatsApp with details for <span className="text-[#C8FF91]">{productTitle}</span></p>
               </motion.div>
             ) : (
               <>
-                <div className="mb-8">
-                  <p className="text-indigo-400 text-xs font-bold tracking-widest uppercase mb-2">Inquiry</p>
-                  <h3 className="text-2xl font-bold text-white tracking-tight">{productTitle}</h3>
+                <div className="mb-5">
+                  <p className="text-[#C8FF91] text-[10px] font-bold tracking-widest uppercase mb-1">Inquiry</p>
+                  <h3 className="text-lg sm:text-xl font-bold text-white tracking-tight leading-snug">{productTitle}</h3>
                 </div>
 
                 {errorMsg && (
-                  <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 text-red-400 text-xs rounded-xl">
+                  <div className="mb-4 p-2.5 bg-red-500/10 border border-red-500/30 text-red-400 text-xs rounded-lg">
                     {errorMsg}
                   </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-5">
+                <form onSubmit={handleSubmit} className="space-y-3.5">
                   <div>
-                    <label className="text-[11px] font-bold tracking-widest text-neutral-500 uppercase block mb-2">Full Name *</label>
+                    <label className="text-[10px] font-bold tracking-widest text-neutral-400 uppercase block mb-1">Full Name *</label>
                     <input
                       type="text"
                       required
                       value={form.name}
                       onChange={(e) => setForm({ ...form, name: e.target.value })}
-                      placeholder="Your full name"
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                      placeholder="Enter your name"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#C8FF91]"
                     />
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[11px] font-bold tracking-widest text-neutral-500 uppercase block mb-2">Email *</label>
+                      <label className="text-[10px] font-bold tracking-widest text-neutral-400 uppercase block mb-1">Email *</label>
                       <input
                         type="email"
                         required
                         value={form.email}
                         onChange={(e) => setForm({ ...form, email: e.target.value })}
-                        placeholder="you@email.com"
-                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                        placeholder="name@company.com"
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#C8FF91]"
                       />
                     </div>
                     <div>
-                      <label className="text-[11px] font-bold tracking-widest text-neutral-500 uppercase block mb-2">Phone *</label>
+                      <label className="text-[10px] font-bold tracking-widest text-neutral-400 uppercase block mb-1">Phone *</label>
                       <input
                         type="tel"
                         required
                         value={form.phone}
                         onChange={(e) => setForm({ ...form, phone: e.target.value })}
                         placeholder="+91-XXXXX-XXXXX"
-                        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
+                        className="w-full bg-white/5 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#C8FF91]"
                       />
                     </div>
                   </div>
+
                   <div>
-                    <label className="text-[11px] font-bold tracking-widest text-neutral-500 uppercase block mb-2">Subject</label>
-                    <input
-                      type="text"
-                      value={form.subject}
-                      onChange={(e) => setForm({ ...form, subject: e.target.value })}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-bold tracking-widest text-neutral-500 uppercase block mb-2">Message</label>
+                    <label className="text-[10px] font-bold tracking-widest text-neutral-400 uppercase block mb-1">Requirements</label>
                     <textarea
-                      rows={3}
+                      rows={2}
                       value={form.message}
                       onChange={(e) => setForm({ ...form, message: e.target.value })}
-                      placeholder="Tell us about your requirements..."
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder:text-neutral-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-colors resize-none"
+                      placeholder="Brief details about your timeline or budget..."
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder:text-neutral-600 focus:outline-none focus:border-[#C8FF91] resize-none"
                     />
                   </div>
+
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full py-3.5 rounded-xl bg-white text-black font-bold text-sm tracking-widest uppercase hover:bg-neutral-200 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full py-3 rounded-xl bg-[#C8FF91] text-black font-bold text-xs tracking-wider uppercase hover:bg-[#b5f278] active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
                   >
-                    {loading ? 'Submitting...' : 'Submit Inquiry'}
+                    {loading ? 'Processing...' : 'Send Inquiry to WhatsApp →'}
                   </button>
                 </form>
               </>
@@ -397,83 +401,84 @@ const InquiryModal = ({ isOpen, onClose, productTitle }: { isOpen: boolean, onCl
   );
 };
 
-// Premium Visual Card
+// Compact, Sleek & Mobile-Friendly Visual Card
 const PremiumCard = ({ item, index, onCardClick }: { item: any, index: number, onCardClick?: (title: string) => void }) => {
   const imageUrl = getImageForTitle(item.title);
   const hue = (index * 37) % 360;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 40 }}
+      initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-100px" }}
-      transition={{ duration: 0.7, delay: (index % 3) * 0.15, ease: [0.22, 1, 0.36, 1] }}
-      className="group relative rounded-[2rem] overflow-hidden bg-white/[0.03] border border-white/[0.08] backdrop-blur-md cursor-pointer hover:bg-white/[0.06] transition-all duration-500 hover:border-white/[0.2] hover:shadow-[0_0_80px_rgba(255,255,255,0.05)] flex flex-col h-full"
+      viewport={{ once: true, margin: "-50px" }}
+      transition={{ duration: 0.4, delay: (index % 4) * 0.05 }}
+      className="group relative rounded-2xl overflow-hidden bg-white/[0.03] border border-white/[0.08] hover:bg-white/[0.06] transition-all duration-300 hover:border-white/[0.25] flex flex-col h-full cursor-pointer shadow-sm hover:shadow-xl"
       onClick={() => onCardClick?.(item.title)}
     >
-      <div className="aspect-[4/3] w-full overflow-hidden relative">
-        <motion.div
+      {/* Compact Image Container: Reduced height */}
+      <div className="aspect-[16/9] sm:aspect-[16/10] w-full overflow-hidden relative">
+        <div
           className="absolute inset-0"
           style={{ background: `linear-gradient(135deg, hsl(${hue},60%,15%) 0%, hsl(${hue + 40},40%,8%) 100%)` }}
-          whileHover={{ scale: 1.05 }}
-          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
         >
           <img
             src={imageUrl}
             alt={item.title}
             loading="lazy"
-            className="w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-all duration-500"
+            className="w-full h-full object-cover opacity-65 group-hover:opacity-85 group-hover:scale-105 transition-all duration-500"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0A] via-[#0A0A0A]/40 to-transparent" />
-          <div className="absolute inset-0 bg-indigo-900/10 mix-blend-overlay" />
-        </motion.div>
+        </div>
 
         {item.tag && (
-          <div className="absolute top-6 left-6 z-10 flex gap-2">
-            <span className="px-4 py-1.5 rounded-full bg-black/80 backdrop-blur-md border border-white/10 text-[10px] font-bold tracking-widest uppercase text-white/80 group-hover:text-white transition-colors">
+          <div className="absolute top-3 left-3 z-10">
+            <span className="px-2.5 py-1 rounded-md bg-black/80 backdrop-blur-md border border-white/10 text-[9px] font-bold tracking-wider uppercase text-white/80 group-hover:text-white">
               {item.tag} ↗
             </span>
           </div>
         )}
+
+        {/* Small, subtle corner arrow */}
+        <div className="absolute top-3 right-3 w-7 h-7 rounded-full border border-white/10 flex items-center justify-center bg-black/60 backdrop-blur-xs group-hover:bg-[#C8FF91] group-hover:text-black transition-colors">
+          <ArrowUpRight className="w-3.5 h-3.5 text-white group-hover:text-black transition-colors" />
+        </div>
       </div>
 
-      <div className="p-8 relative z-10 flex flex-col flex-grow">
+      {/* Compact Card Content */}
+      <div className="p-4 sm:p-4.5 relative z-10 flex flex-col flex-grow">
         {item.label && (
-          <p className="text-indigo-400 text-[10px] font-semibold tracking-[0.1em] uppercase mb-3">
+          <p className="text-[#C8FF91] text-[9px] font-semibold tracking-wider uppercase mb-1.5 truncate">
             {item.label}
           </p>
         )}
 
-        <h3 className="text-2xl font-bold text-white mb-4 tracking-tight group-hover:text-indigo-300 transition-colors duration-300 leading-snug">
+        <h3 className="text-sm sm:text-base font-bold text-white mb-2 tracking-tight group-hover:text-[#C8FF91] transition-colors line-clamp-1 leading-snug">
           {item.title}
         </h3>
 
         {item.desc && (
-          <p className="text-neutral-400 text-sm leading-relaxed mb-6">
+          <p className="text-neutral-400 text-xs leading-relaxed mb-3 line-clamp-2">
             {item.desc}
           </p>
         )}
 
-        <div className="mt-auto pt-6 border-t border-white/5 space-y-4">
-          <div className="flex items-start gap-3">
-            <Code2 className="w-4 h-4 text-neutral-500 mt-1 flex-shrink-0" />
-            <div>
-              <p className="text-[10px] font-bold tracking-widest text-neutral-500 uppercase mb-1">Languages / Tools</p>
-              <p className="text-sm text-neutral-300 font-medium leading-relaxed">{item.techs}</p>
+        <div className="mt-auto pt-3 border-t border-white/5 space-y-2">
+          {item.techs && (
+            <div className="flex items-center gap-2">
+              <Code2 className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+              <p className="text-[11px] text-neutral-300 font-medium truncate">{item.techs}</p>
             </div>
-          </div>
+          )}
 
-          <div className="flex items-center gap-3">
-            <Clock className="w-4 h-4 text-neutral-500 flex-shrink-0" />
-            <div>
-              <p className="text-[10px] font-bold tracking-widest text-neutral-500 uppercase mb-1">Time ⎋</p>
-              <p className="text-sm text-white font-semibold">{item.time}</p>
+          <div className="flex items-center justify-between pt-1">
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-neutral-500 shrink-0" />
+              <span className="text-[11px] text-neutral-400 font-medium">{item.time}</span>
             </div>
+            <span className="text-[10px] text-[#C8FF91] font-bold group-hover:underline">
+              Inquire →
+            </span>
           </div>
-        </div>
-
-        <div className="absolute top-8 right-8 w-10 h-10 rounded-full border border-white/10 flex items-center justify-center bg-white/5 backdrop-blur-sm group-hover:bg-white group-hover:border-white transition-all duration-500">
-          <ArrowUpRight className="w-4 h-4 text-white group-hover:text-black transition-colors" />
         </div>
       </div>
     </motion.div>
@@ -490,49 +495,45 @@ export default function OurProductPage() {
   };
 
   return (
-    <div className="bg-[#0A0A0A] text-white min-h-screen selection:bg-indigo-600 selection:text-white font-sans">
+    <div className="bg-[#0A0A0A] text-white min-h-screen selection:bg-[#C8FF91] selection:text-black font-sans">
       <Nav />
       <InquiryModal isOpen={modalOpen} onClose={() => setModalOpen(false)} productTitle={selectedProduct} />
 
-      <main className="pt-32 md:pt-48 pb-32">
-        <section className="px-6 sm:px-8 max-w-screen-2xl mx-auto mb-32 relative">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[50vh] bg-indigo-500/10 blur-[120px] rounded-full pointer-events-none -z-10" />
+      <main className="pt-24 sm:pt-32 md:pt-40 pb-24">
+        {/* Compact Hero */}
+        <section className="px-4 sm:px-6 md:px-8 max-w-screen-2xl mx-auto mb-14 sm:mb-20 relative">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[70vw] h-[40vh] bg-[#C8FF91]/5 blur-[120px] rounded-full pointer-events-none -z-10" />
 
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
-            className="max-w-5xl"
+            transition={{ duration: 0.6 }}
+            className="max-w-4xl"
           >
-            <div className="flex items-center gap-4 mb-8">
-              <span className="w-12 h-px bg-white/30" />
-              <span className="text-white/60 font-medium uppercase tracking-[0.3em] text-xs">Our Products</span>
+            <div className="flex items-center gap-3 mb-4">
+              <span className="w-8 h-px bg-[#C8FF91]" />
+              <span className="text-[#C8FF91] font-bold uppercase tracking-[0.2em] text-[11px]">Our Products</span>
             </div>
 
-            <h1 className="text-5xl sm:text-7xl md:text-[6rem] font-black leading-[0.9] tracking-tighter mb-10">
-              DIGITAL <br />
-              <span className="text-neutral-500">EXCELLENCE.</span>
+            <h1 className="text-3xl sm:text-5xl md:text-6xl font-black leading-tight tracking-tight mb-4">
+              Digital <span className="text-neutral-500">Excellence.</span>
             </h1>
 
-            <p className="text-xl md:text-2xl text-neutral-400 max-w-2xl leading-relaxed">
-              Askus Studio delivers cutting-edge enterprise solutions, including cloud-based analytics platforms, AI-powered automation tools, and secure data management systems.
+            <p className="text-sm sm:text-base text-neutral-400 max-w-xl leading-relaxed">
+              Explore AskUs Studio&apos;s modular web platforms, custom SaaS software, mobile applications, and enterprise automations.
             </p>
           </motion.div>
         </section>
 
-        <section className="pt-12 pb-32 relative">
-          <div className="px-6 sm:px-8 max-w-screen-2xl mx-auto">
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-100px" }}
-              transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-              className="max-w-4xl mb-16"
-            >
-              <h2 className="text-3xl md:text-5xl font-bold tracking-tighter mb-6">Featured Solutions</h2>
-            </motion.div>
+        {/* Featured Solutions Section */}
+        <section className="pb-16 sm:pb-24 relative">
+          <div className="px-4 sm:px-6 md:px-8 max-w-screen-2xl mx-auto">
+            <div className="mb-6 sm:mb-8">
+              <h2 className="text-xl sm:text-3xl font-bold tracking-tight">Featured Solutions</h2>
+            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 md:gap-10">
+            {/* Responsive Compact Grid: 1 col on mobile, 2 on sm, 3 on lg, 4 on xl */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
               {featuredCards.map((item, idx) => (
                 <PremiumCard key={idx} item={item} index={idx} onCardClick={handleCardClick} />
               ))}
@@ -540,23 +541,19 @@ export default function OurProductPage() {
           </div>
         </section>
 
+        {/* Categorized Product Grids */}
         {categories.map((category) => (
-          <section key={category.id} className="pt-24 pb-32 border-t border-white/[0.05] relative">
-            <div className="px-6 sm:px-8 max-w-screen-2xl mx-auto">
-              <motion.div
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-100px" }}
-                transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-                className="max-w-4xl mb-20"
-              >
-                <h2 className="text-4xl md:text-6xl font-bold tracking-tighter mb-6">{category.title}</h2>
-                <p className="text-xl text-neutral-400 leading-relaxed max-w-2xl">
+          <section key={category.id} className="pt-12 sm:pt-16 pb-16 sm:pb-20 border-t border-white/[0.06] relative">
+            <div className="px-4 sm:px-6 md:px-8 max-w-screen-2xl mx-auto">
+              <div className="max-w-3xl mb-8">
+                <h2 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight mb-2">{category.title}</h2>
+                <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed">
                   {category.description}
                 </p>
-              </motion.div>
+              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 md:gap-10">
+              {/* 4-Column Compact Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
                 {category.items.map((item, idx) => (
                   <PremiumCard key={idx} item={item} index={idx} onCardClick={handleCardClick} />
                 ))}
