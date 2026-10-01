@@ -112,7 +112,7 @@ export default function ProjectKanbanBoard({
   const fetchTasks = async (role: string, userId: string) => {
     let query = supabase
       .from('project_tasks')
-      .select('*, assignee:profiles(full_name, email, phone, employee_code, availability_status)')
+      .select('*')
       .eq('project_id', Number(projectId) || projectId);
 
     if (role === 'admin' || role === 'director' || role === 'manager' || role === 'senior_manager') {
@@ -180,10 +180,11 @@ export default function ProjectKanbanBoard({
         taskPayload.assigned_to = targetAssignee;
       }
 
+      // Foreign key error fixed: using clean .select().single()
       const { data, error } = await supabase
         .from('project_tasks')
         .insert([taskPayload])
-        .select('*, assignee:profiles(full_name, email, phone, employee_code, availability_status)')
+        .select()
         .single();
 
       if (error) {
@@ -203,7 +204,7 @@ export default function ProjectKanbanBoard({
 
         const assignedMember = teamMembers.find((m) => String(m.id) === String(targetAssignee));
 
-        // 1. In-App Notification Bell
+        // 1. In-App Notification
         if (targetAssignee && targetAssignee !== currentUser?.id) {
           triggerNotification({
             userId: targetAssignee,
@@ -214,7 +215,7 @@ export default function ProjectKanbanBoard({
           }).catch((err) => console.log('Notification trigger error:', err));
         }
 
-        // 2. Automatic Background Email Notification
+        // 2. Automatic Email Notification via Resend
         if (assignedMember?.email) {
           fetch('/api/tasks/notify-email', {
             method: 'POST',
@@ -312,7 +313,7 @@ export default function ProjectKanbanBoard({
                     {(provided) => (
                       <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2 min-h-[160px]">
                         {colTasks.map((t, index) => {
-                          const assignee = teamMembers.find((m) => String(m.id) === String(t.assigned_to)) || t.assignee;
+                          const assignee = teamMembers.find((m) => String(m.id) === String(t.assigned_to));
 
                           return (
                             <Draggable key={String(t.id)} draggableId={String(t.id)} index={index}>
