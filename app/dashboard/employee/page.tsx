@@ -19,6 +19,10 @@ export default function EmployeeDashboard() {
   const [newTaskTitle, setNewTaskTitle] = useState<Record<string, string>>({});
   const [newNoteText, setNewNoteText] = useState<Record<string, string>>({});
 
+  // Availability status state
+  const [availability, setAvailability] = useState<'available' | 'busy' | 'on_leave'>('available');
+  const [updatingAvailability, setUpdatingAvailability] = useState(false);
+
   // Shift Stopwatch State
   const [timerActive, setTimerActive] = useState<Record<string, boolean>>({});
   const [timerSeconds, setTimerSeconds] = useState<Record<string, number>>({});
@@ -117,6 +121,7 @@ export default function EmployeeDashboard() {
         return;
       }
       setProfile(prof);
+      setAvailability(prof.availability_status || 'available');
 
       // Projects where user is owner / lead
       const { data: leadProjects } = await supabase
@@ -178,6 +183,24 @@ export default function EmployeeDashboard() {
   useEffect(() => {
     fetchEmployeeData();
   }, [fetchEmployeeData]);
+
+  // Handle employee availability status update
+  const handleAvailabilityChange = async (newStatus: 'available' | 'busy' | 'on_leave') => {
+    if (!user) return;
+    setUpdatingAvailability(true);
+    setAvailability(newStatus);
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ availability_status: newStatus })
+      .eq('id', user.id);
+
+    setUpdatingAvailability(false);
+    if (error) {
+      alert('Error updating status: ' + error.message);
+      setAvailability(profile?.availability_status || 'available');
+    }
+  };
 
   // Anti-Cheat: Task completion modal open
   const handleInitiateTaskCompletion = (task: any, projectId: string | number) => {
@@ -263,23 +286,46 @@ export default function EmployeeDashboard() {
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans antialiased">
       {/* Top Header */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200">
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-8 h-8 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center shrink-0 bg-white">
               <img src="/logo/site-logo.jpg" alt="Askus" className="w-full h-full object-cover" />
             </div>
             <div className="truncate">
-              <h1 className="text-xs sm:text-sm font-bold text-slate-900 uppercase flex items-center gap-1.5 truncate">
-                WORKSPACE
-                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase">
+              <div className="flex items-center gap-1.5 truncate">
+                <h1 className="text-xs sm:text-sm font-bold text-slate-900 uppercase truncate">
+                  WORKSPACE
+                </h1>
+                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase shrink-0">
                   {profile?.role?.replace('_', ' ') || 'Team'}
                 </span>
-              </h1>
+              </div>
               <p className="text-[10px] text-slate-500 truncate">{profile?.full_name || 'Team Member'}</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Right Action Bar: Availability Selector + Notifications + Logout */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Status Switcher for Employee */}
+            <div className="relative">
+              <select
+                value={availability}
+                disabled={updatingAvailability}
+                onChange={(e) => handleAvailabilityChange(e.target.value as any)}
+                className={`text-[10px] sm:text-xs font-bold rounded-lg px-2 py-1 sm:py-1.5 border outline-none cursor-pointer transition-all shadow-2xs ${
+                  availability === 'available'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                    : availability === 'busy'
+                    ? 'bg-amber-50 text-amber-800 border-amber-300'
+                    : 'bg-rose-50 text-rose-800 border-rose-300'
+                }`}
+              >
+                <option value="available">🟢 Available</option>
+                <option value="busy">🟡 Busy</option>
+                <option value="on_leave">🔴 On Leave</option>
+              </select>
+            </div>
+
             {user && <NotificationBell userId={user.id} />}
             <button
               onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }}
