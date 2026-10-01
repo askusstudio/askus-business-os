@@ -23,7 +23,8 @@ import {
   Edit3, 
   Trash2, 
   CheckCircle2, 
-  MessageSquare 
+  MessageSquare,
+  Filter
 } from 'lucide-react';
 
 const PROJECT_STATUSES = [
@@ -39,6 +40,7 @@ const PROJECT_STATUSES = [
 export default function WorkspaceOverviewDashboard() {
   const [activeTab, setActiveTab] = useState<'projects' | 'team' | 'crm' | 'finance' | 'slack'>('projects');
   const [projects, setProjects] = useState<any[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('all');
   const [inquiries, setInquiries] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
@@ -69,8 +71,19 @@ export default function WorkspaceOverviewDashboard() {
 
   const [showUserModal, setShowUserModal] = useState(false);
   const [creatingUser, setCreatingUser] = useState(false);
-  const [newUser, setNewUser] = useState({ fullName: '', email: '', password: '', role: 'employee' });
+  const [newUser, setNewUser] = useState({ 
+    fullName: '', 
+    email: '', 
+    password: '', 
+    role: 'employee',
+    employeeCode: '',
+    phone: ''
+  });
   const [editingEmployee, setEditingEmployee] = useState<any | null>(null);
+
+  // Pipeline Lead Edit State
+  const [editingLead, setEditingLead] = useState<any | null>(null);
+  const [savingLead, setSavingLead] = useState(false);
 
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [creatingInvoice, setCreatingInvoice] = useState(false);
@@ -107,7 +120,7 @@ export default function WorkspaceOverviewDashboard() {
       const { data: clientData } = await supabase.from('profiles').select('*').eq('role', 'client').order('created_at', { ascending: true });
       const { data: invData } = await supabase.from('project_invoices').select('*').order('created_at', { ascending: false });
 
-      // Safe fetch for project_time_logs to avoid 400 Bad Request
+      // Safe fetch for project_time_logs
       const { data: timeLogsData } = await supabase.from('project_time_logs').select('*');
       if (timeLogsData) {
         const overallHours = timeLogsData.reduce((acc: number, curr: any) => acc + Number(curr.hours_logged || curr.hours || 0), 0);
@@ -150,6 +163,8 @@ export default function WorkspaceOverviewDashboard() {
       .update({
         full_name: editingEmployee.full_name,
         role: editingEmployee.role,
+        employee_code: editingEmployee.employee_code || null,
+        phone: editingEmployee.phone || null,
         availability_status: editingEmployee.availability_status || 'available',
       })
       .eq('id', editingEmployee.id);
@@ -176,7 +191,7 @@ export default function WorkspaceOverviewDashboard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create user');
       setShowUserModal(false);
-      setNewUser({ fullName: '', email: '', password: '', role: 'employee' });
+      setNewUser({ fullName: '', email: '', password: '', role: 'employee', employeeCode: '', phone: '' });
       loadData();
     } catch (err: any) {
       alert(err.message);
@@ -247,6 +262,32 @@ export default function WorkspaceOverviewDashboard() {
     loadData();
   };
 
+  // Pipeline Lead Update
+  const handleUpdateLead = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLead) return;
+    setSavingLead(true);
+    const { error } = await supabase
+      .from('inquiries')
+      .update({
+        full_name: editingLead.full_name || editingLead.name,
+        name: editingLead.full_name || editingLead.name,
+        email: editingLead.email,
+        phone: editingLead.phone || null,
+        status: editingLead.status,
+        message: editingLead.message || null,
+      })
+      .eq('id', editingLead.id);
+
+    setSavingLead(false);
+    if (!error) {
+      setInquiries((prev) => prev.map((l) => (l.id === editingLead.id ? editingLead : l)));
+      setEditingLead(null);
+    } else {
+      alert('Error updating lead: ' + error.message);
+    }
+  };
+
   const handleConvertInquiry = async (inq: any) => {
     if (!confirm(`Convert lead "${inq.full_name || inq.name}" into client?`)) return;
     setConvertingId(inq.id);
@@ -312,9 +353,14 @@ export default function WorkspaceOverviewDashboard() {
   const totalRevenue = invoices.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
   const paidRevenue = invoices.filter((i) => i.status === 'Paid').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
 
+  // Filter projects by dropdown selection
+  const filteredProjects = selectedProjectId === 'all'
+    ? projects
+    : projects.filter((p) => String(p.id) === String(selectedProjectId));
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans antialiased selection:bg-[#C8FF91] selection:text-black">
-      {/* Sticky Mobile-Friendly Header */}
+      {/* Sticky Header */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -363,7 +409,7 @@ export default function WorkspaceOverviewDashboard() {
           </div>
         </div>
 
-        {/* 5 Tabs with smooth horizontal touch-scrolling */}
+        {/* 5 Navigation Tabs */}
         <div className="max-w-7xl mx-auto px-3 sm:px-6 flex gap-2 border-t border-slate-100 overflow-x-auto [&::-webkit-scrollbar]:hidden">
           {[
             { id: 'projects', label: 'Projects', icon: FolderKanban, count: projects.length },
@@ -407,26 +453,44 @@ export default function WorkspaceOverviewDashboard() {
               <div className="space-y-4 sm:space-y-6">
                 <AdminVerificationQueue />
 
-                <div className="flex items-center justify-between pt-1">
-                  <div>
-                    <h2 className="text-xs sm:text-sm font-bold text-slate-900">Workspaces & Sprints</h2>
-                    <p className="text-[11px] text-slate-500">Live kanban, deliverables & approvals</p>
+                {/* Project Selection Dropdown */}
+                <div className="bg-white border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
+                  <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+                    <Filter size={14} className="text-slate-400 shrink-0" />
+                    <label className="text-xs font-bold text-slate-700 whitespace-nowrap">View Project:</label>
+                    <select
+                      value={selectedProjectId}
+                      onChange={(e) => setSelectedProjectId(e.target.value)}
+                      className="w-full max-w-sm text-xs border border-slate-200 rounded-lg p-1.5 font-semibold bg-slate-50 outline-none focus:border-black cursor-pointer"
+                    >
+                      <option value="all">📁 All Projects ({projects.length})</option>
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.title} (#{p.id}) - {p.status}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                  <button
-                    onClick={() => setShowProjectModal(true)}
-                    className="px-2.5 py-1.5 bg-black text-white rounded-lg text-xs font-bold cursor-pointer"
-                  >
-                    + New
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400 font-mono">
+                      Showing {filteredProjects.length} of {projects.length}
+                    </span>
+                    <button
+                      onClick={() => setShowProjectModal(true)}
+                      className="px-2.5 py-1.5 bg-black text-white rounded-lg text-xs font-bold cursor-pointer"
+                    >
+                      + New
+                    </button>
+                  </div>
                 </div>
 
-                {projects.length === 0 ? (
+                {filteredProjects.length === 0 ? (
                   <div className="bg-white border border-dashed border-slate-200 rounded-xl p-8 text-center text-xs text-slate-400">
-                    No active projects.
+                    No matching project found.
                   </div>
                 ) : (
                   <div className="space-y-3 sm:space-y-4">
-                    {projects.map((proj) => {
+                    {filteredProjects.map((proj) => {
                       const assignedClient = clients.find((c) => c.id === proj.client_id);
                       const assignedEmp = employees.find((e) => e.id === proj.assigned_to);
                       const currentTab = activeProjectTab[proj.id] || 'kanban';
@@ -484,7 +548,7 @@ export default function WorkspaceOverviewDashboard() {
                                 { key: 'files', label: '📁 Files' },
                                 { key: 'brief', label: '📋 Brief' },
                                 { key: 'versions', label: '🎨 Versions' },
-                                { key: 'timelog', label: '⏱️️ Logs' },
+                                { key: 'timelog', label: '⏱ Logs' },
                                 { key: 'chat', label: '💬 Chat' },
                               ].map((t) => (
                                 <button
@@ -501,7 +565,13 @@ export default function WorkspaceOverviewDashboard() {
                               ))}
                             </div>
 
-                            {currentTab === 'kanban' && <ProjectKanbanBoard projectId={proj.id} teamRoster={employees} />}
+                            {currentTab === 'kanban' && (
+                              <ProjectKanbanBoard 
+                                projectId={proj.id} 
+                                projectTitle={proj.title} 
+                                teamRoster={employees} 
+                              />
+                            )}
                             {currentTab === 'files' && <ProjectFileManager projectId={proj.id} userId={currentUserId} canUpload={true} />}
                             {currentTab === 'brief' && <ProjectBriefViewer projectId={proj.id} />}
                             {currentTab === 'versions' && <DeliverableVersionManager projectId={proj.id} currentUserId={currentUserId} />}
@@ -528,14 +598,14 @@ export default function WorkspaceOverviewDashboard() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-xs sm:text-sm font-bold text-slate-900">Team Roster</h2>
+                    <h2 className="text-xs sm:text-sm font-bold text-slate-900">Team Directory & Unique IDs</h2>
                     <p className="text-[11px] text-slate-500">Live member status & role allocation</p>
                   </div>
                   <button
                     onClick={() => setShowUserModal(true)}
                     className="px-2.5 py-1.5 bg-black text-white rounded-lg text-xs font-bold cursor-pointer"
                   >
-                    + Provision
+                    + Provision User
                   </button>
                 </div>
 
@@ -549,8 +619,17 @@ export default function WorkspaceOverviewDashboard() {
                         <div>
                           <div className="flex items-start justify-between">
                             <div className="min-w-0">
-                              <h4 className="text-xs font-bold text-slate-900 truncate">{emp.full_name || 'Member'}</h4>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <h4 className="text-xs font-bold text-slate-900 truncate">{emp.full_name || 'Member'}</h4>
+                                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-900 text-white font-bold">
+                                  {emp.employee_code || `EMP-${emp.id.slice(0, 4).toUpperCase()}`}
+                                </span>
+                              </div>
                               <p className="text-[10px] text-slate-400 truncate">{emp.email}</p>
+                              {/* Display phone number cleanly only when it exists */}
+                              {emp.phone && (
+                                <p className="text-[10px] text-slate-500 font-mono mt-0.5">{emp.phone}</p>
+                              )}
                             </div>
                             <span className="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 shrink-0">
                               {emp.role}
@@ -576,13 +655,15 @@ export default function WorkspaceOverviewDashboard() {
                           <div className="flex items-center gap-1">
                             <button
                               onClick={() => setEditingEmployee(emp)}
-                              className="p-1 hover:bg-slate-100 rounded text-slate-600"
+                              className="p-1 hover:bg-slate-100 rounded text-slate-600 cursor-pointer"
+                              title="Edit Employee & ID"
                             >
                               <Edit3 size={13} />
                             </button>
                             <button
                               onClick={() => handleDeleteEmployee(emp.id)}
-                              className="p-1 hover:bg-rose-50 rounded text-rose-500"
+                              className="p-1 hover:bg-rose-50 rounded text-rose-500 cursor-pointer"
+                              title="Remove Employee"
                             >
                               <Trash2 size={13} />
                             </button>
@@ -595,11 +676,14 @@ export default function WorkspaceOverviewDashboard() {
               </div>
             )}
 
-            {/* TAB 3: CRM */}
+            {/* TAB 3: CRM / PIPELINE */}
             {activeTab === 'crm' && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xs sm:text-sm font-bold text-slate-900">Incoming Pipeline</h2>
+                  <div>
+                    <h2 className="text-xs sm:text-sm font-bold text-slate-900">Incoming Pipeline</h2>
+                    <p className="text-[11px] text-slate-500">Manage, edit, and convert prospective leads</p>
+                  </div>
                   <span className="text-xs font-mono font-bold bg-white px-2.5 py-0.5 rounded-full border border-slate-200">
                     {inquiries.length} Leads
                   </span>
@@ -615,11 +699,20 @@ export default function WorkspaceOverviewDashboard() {
                             <h4 className="text-xs font-bold text-slate-900 truncate">{inq.full_name || inq.name || 'Lead'}</h4>
                             <p className="text-[10px] text-slate-400 truncate">{inq.email} • {inq.phone || 'No phone'}</p>
                           </div>
-                          <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded shrink-0 ${
-                            isConverted ? 'bg-emerald-50 text-emerald-700' : 'bg-sky-50 text-sky-700'
-                          }`}>
-                            {inq.status || 'New'}
-                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded ${
+                              isConverted ? 'bg-emerald-50 text-emerald-700' : 'bg-sky-50 text-sky-700'
+                            }`}>
+                              {inq.status || 'New'}
+                            </span>
+                            <button 
+                              onClick={() => setEditingLead(inq)} 
+                              className="p-1 hover:bg-slate-100 rounded text-slate-600 cursor-pointer"
+                              title="Edit Lead"
+                            >
+                              <Edit3 size={13} />
+                            </button>
+                          </div>
                         </div>
                         {inq.message && <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded-lg break-words">"{inq.message}"</p>}
                         {!isConverted ? (
@@ -715,7 +808,159 @@ export default function WorkspaceOverviewDashboard() {
         )}
       </main>
 
-      {/* Responsive Modals */}
+      {/* LEAD EDIT MODAL */}
+      {editingLead && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
+          <div className="bg-white border border-slate-200 rounded-xl p-5 max-w-sm w-full space-y-3 shadow-xl">
+            <h3 className="text-xs font-bold text-slate-900 uppercase">Edit Pipeline Lead</h3>
+            <form onSubmit={handleUpdateLead} className="space-y-2.5">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Prospect Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Full Name"
+                  value={editingLead.full_name || editingLead.name || ''}
+                  onChange={(e) => setEditingLead({ ...editingLead, full_name: e.target.value, name: e.target.value })}
+                  className="w-full text-xs border rounded-lg p-2"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Email *</label>
+                <input
+                  type="email"
+                  required
+                  placeholder="Email"
+                  value={editingLead.email || ''}
+                  onChange={(e) => setEditingLead({ ...editingLead, email: e.target.value })}
+                  className="w-full text-xs border rounded-lg p-2"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Phone</label>
+                <input
+                  type="text"
+                  placeholder="+91..."
+                  value={editingLead.phone || ''}
+                  onChange={(e) => setEditingLead({ ...editingLead, phone: e.target.value })}
+                  className="w-full text-xs border rounded-lg p-2"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Lead Stage</label>
+                <select
+                  value={editingLead.status || 'New'}
+                  onChange={(e) => setEditingLead({ ...editingLead, status: e.target.value })}
+                  className="w-full text-xs border rounded-lg p-2 cursor-pointer"
+                >
+                  <option value="New">New</option>
+                  <option value="Contacted">Contacted</option>
+                  <option value="Meeting Scheduled">Meeting Scheduled</option>
+                  <option value="Proposal Sent">Proposal Sent</option>
+                  <option value="Converted">Converted</option>
+                  <option value="Lost">Lost</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Notes / Requirement</label>
+                <textarea
+                  rows={2}
+                  placeholder="Project scope or notes..."
+                  value={editingLead.message || ''}
+                  onChange={(e) => setEditingLead({ ...editingLead, message: e.target.value })}
+                  className="w-full text-xs border rounded-lg p-2"
+                />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button 
+                  type="button" 
+                  onClick={() => setEditingLead(null)} 
+                  className="flex-1 py-1.5 bg-slate-100 rounded-lg text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={savingLead} 
+                  className="flex-1 py-1.5 bg-black text-white rounded-lg text-xs font-bold cursor-pointer"
+                >
+                  {savingLead ? 'Saving...' : 'Update Lead'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EMPLOYEE EDIT MODAL */}
+      {editingEmployee && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
+          <div className="bg-white border border-slate-200 rounded-xl p-5 max-w-sm w-full space-y-3 shadow-xl">
+            <h3 className="text-xs font-bold text-slate-900 uppercase">Edit Employee Profile</h3>
+            <div className="space-y-2.5">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Full Name</label>
+                <input
+                  type="text"
+                  value={editingEmployee.full_name || ''}
+                  onChange={(e) => setEditingEmployee({ ...editingEmployee, full_name: e.target.value })}
+                  className="w-full text-xs border rounded-lg p-2"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Employee Unique ID</label>
+                <input
+                  type="text"
+                  placeholder="e.g. ASK-EMP01"
+                  value={editingEmployee.employee_code || ''}
+                  onChange={(e) => setEditingEmployee({ ...editingEmployee, employee_code: e.target.value })}
+                  className="w-full text-xs border rounded-lg p-2 font-mono font-bold"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Phone Number</label>
+                <input
+                  type="text"
+                  placeholder="+91..."
+                  value={editingEmployee.phone || ''}
+                  onChange={(e) => setEditingEmployee({ ...editingEmployee, phone: e.target.value })}
+                  className="w-full text-xs border rounded-lg p-2 font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Role</label>
+                <select
+                  value={editingEmployee.role}
+                  onChange={(e) => setEditingEmployee({ ...editingEmployee, role: e.target.value })}
+                  className="w-full text-xs border rounded-lg p-2 cursor-pointer"
+                >
+                  <option value="employee">Employee</option>
+                  <option value="manager">Manager</option>
+                  <option value="intern">Intern</option>
+                </select>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button 
+                  type="button" 
+                  onClick={() => setEditingEmployee(null)} 
+                  className="flex-1 py-1.5 bg-slate-100 rounded-lg text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button" 
+                  onClick={handleSaveEmployeeDetails} 
+                  className="flex-1 py-1.5 bg-black text-white rounded-lg text-xs font-bold cursor-pointer"
+                >
+                  Save Profile
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* USER PROVISION MODAL */}
       {showUserModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
           <div className="bg-white border border-slate-200 rounded-xl p-5 w-full max-w-sm shadow-xl space-y-3">
@@ -728,6 +973,20 @@ export default function WorkspaceOverviewDashboard() {
                 value={newUser.fullName}
                 onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
                 className="w-full text-xs border rounded-lg p-2"
+              />
+              <input
+                type="text"
+                placeholder="Unique Employee ID (e.g. ASK-01)"
+                value={newUser.employeeCode}
+                onChange={(e) => setNewUser({ ...newUser, employeeCode: e.target.value })}
+                className="w-full text-xs border rounded-lg p-2 font-mono"
+              />
+              <input
+                type="text"
+                placeholder="Phone (+91...)"
+                value={newUser.phone}
+                onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
+                className="w-full text-xs border rounded-lg p-2 font-mono"
               />
               <input
                 type="email"
@@ -748,7 +1007,7 @@ export default function WorkspaceOverviewDashboard() {
               <select
                 value={newUser.role}
                 onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-                className="w-full text-xs border rounded-lg p-2"
+                className="w-full text-xs border rounded-lg p-2 cursor-pointer"
               >
                 <option value="employee">Employee</option>
                 <option value="manager">Manager</option>
@@ -756,8 +1015,8 @@ export default function WorkspaceOverviewDashboard() {
                 <option value="client">Client</option>
               </select>
               <div className="flex gap-2 pt-1">
-                <button type="button" onClick={() => setShowUserModal(false)} className="flex-1 py-1.5 bg-slate-100 rounded-lg text-xs">Cancel</button>
-                <button type="submit" disabled={creatingUser} className="flex-1 py-1.5 bg-black text-white text-xs font-bold rounded-lg">
+                <button type="button" onClick={() => setShowUserModal(false)} className="flex-1 py-1.5 bg-slate-100 rounded-lg text-xs cursor-pointer">Cancel</button>
+                <button type="submit" disabled={creatingUser} className="flex-1 py-1.5 bg-black text-white text-xs font-bold rounded-lg cursor-pointer">
                   {creatingUser ? '...' : 'Create'}
                 </button>
               </div>
@@ -766,6 +1025,7 @@ export default function WorkspaceOverviewDashboard() {
         </div>
       )}
 
+      {/* PROJECT MODAL */}
       {showProjectModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
           <div className="bg-white border border-slate-200 rounded-xl p-5 w-full max-w-sm shadow-xl space-y-3">
@@ -782,17 +1042,17 @@ export default function WorkspaceOverviewDashboard() {
               <select
                 value={newProject.assigned_to}
                 onChange={(e) => setNewProject({ ...newProject, assigned_to: e.target.value })}
-                className="w-full text-xs border rounded-lg p-2"
+                className="w-full text-xs border rounded-lg p-2 cursor-pointer"
               >
                 <option value="">Select Lead</option>
                 {employees.map((e) => (
-                  <option key={e.id} value={e.id}>{e.full_name} ({e.role})</option>
+                  <option key={e.id} value={e.id}>{e.full_name} ({e.employee_code || e.role})</option>
                 ))}
               </select>
               <select
                 value={newProject.client_id}
                 onChange={(e) => setNewProject({ ...newProject, client_id: e.target.value })}
-                className="w-full text-xs border rounded-lg p-2"
+                className="w-full text-xs border rounded-lg p-2 cursor-pointer"
               >
                 <option value="">Select Client</option>
                 {clients.map((c) => (
@@ -800,8 +1060,8 @@ export default function WorkspaceOverviewDashboard() {
                 ))}
               </select>
               <div className="flex gap-2 pt-1">
-                <button type="button" onClick={() => setShowProjectModal(false)} className="flex-1 py-1.5 bg-slate-100 rounded-lg text-xs">Cancel</button>
-                <button type="submit" disabled={creatingProject} className="flex-1 py-1.5 bg-black text-white text-xs font-bold rounded-lg">
+                <button type="button" onClick={() => setShowProjectModal(false)} className="flex-1 py-1.5 bg-slate-100 rounded-lg text-xs cursor-pointer">Cancel</button>
+                <button type="submit" disabled={creatingProject} className="flex-1 py-1.5 bg-black text-white text-xs font-bold rounded-lg cursor-pointer">
                   {creatingProject ? '...' : 'Create'}
                 </button>
               </div>
@@ -810,6 +1070,7 @@ export default function WorkspaceOverviewDashboard() {
         </div>
       )}
 
+      {/* INVOICE MODAL */}
       {showInvoiceModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
           <div className="bg-white border border-slate-200 rounded-xl p-5 w-full max-w-sm shadow-xl space-y-3">
@@ -819,7 +1080,7 @@ export default function WorkspaceOverviewDashboard() {
                 required
                 value={newInvoice.project_id}
                 onChange={(e) => setNewInvoice({ ...newInvoice, project_id: e.target.value })}
-                className="w-full text-xs border rounded-lg p-2"
+                className="w-full text-xs border rounded-lg p-2 cursor-pointer"
               >
                 <option value="">Select Project</option>
                 {projects.map((p) => (
@@ -835,8 +1096,8 @@ export default function WorkspaceOverviewDashboard() {
                 className="w-full text-xs border rounded-lg p-2"
               />
               <div className="flex gap-2 pt-1">
-                <button type="button" onClick={() => setShowInvoiceModal(false)} className="flex-1 py-1.5 bg-slate-100 rounded-lg text-xs">Cancel</button>
-                <button type="submit" disabled={creatingInvoice} className="flex-1 py-1.5 bg-black text-white text-xs font-bold rounded-lg">
+                <button type="button" onClick={() => setShowInvoiceModal(false)} className="flex-1 py-1.5 bg-slate-100 rounded-lg text-xs cursor-pointer">Cancel</button>
+                <button type="submit" disabled={creatingInvoice} className="flex-1 py-1.5 bg-black text-white text-xs font-bold rounded-lg cursor-pointer">
                   {creatingInvoice ? '...' : 'Issue'}
                 </button>
               </div>
