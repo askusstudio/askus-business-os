@@ -1,33 +1,31 @@
 'use client'
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { Bell, Check, ExternalLink } from 'lucide-react';
+import Link from 'next/link';
 
 export default function NotificationBell({ userId }: { userId: string }) {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isOpen, setIsOpen] = useState(false);
 
-  const fetchNotifications = async () => {
-    if (!userId) return;
-    const { data } = await supabase
-      .from('in_app_notifications')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    if (data) setNotifications(data);
-  };
-
   useEffect(() => {
+    if (!userId) return;
     fetchNotifications();
 
-    // Live real-time notification alert
+    // Realtime notification listener
     const channel = supabase
-      .channel(`notif_user_${userId}`)
+      .channel(`user_notifications_${userId}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'in_app_notifications', filter: `user_id=eq.${userId}` },
-        () => fetchNotifications()
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'workspace_notifications',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          setNotifications((prev) => [payload.new, ...prev]);
+        }
       )
       .subscribe();
 
@@ -36,60 +34,81 @@ export default function NotificationBell({ userId }: { userId: string }) {
     };
   }, [userId]);
 
-  const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const fetchNotifications = async () => {
+    const { data } = await supabase
+      .from('workspace_notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(15);
 
-  const handleOpenDropdown = async () => {
-    setIsOpen(!isOpen);
-    if (!isOpen && unreadCount > 0) {
-      await supabase
-        .from('in_app_notifications')
-        .update({ is_read: true })
-        .eq('user_id', userId);
-
-      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-    }
+    if (data) setNotifications(data);
   };
+
+  const markAllAsRead = async () => {
+    await supabase
+      .from('workspace_notifications')
+      .update({ is_read: true })
+      .eq('user_id', userId);
+
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+  };
+
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   return (
     <div className="relative">
       <button
-        onClick={handleOpenDropdown}
-        className="relative p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
-        aria-label="Notifications"
+        onClick={() => setIsOpen(!isOpen)}
+        className="relative p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
       >
-        <span className="text-sm">🔔</span>
+        <Bell size={16} />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full text-[9px] font-bold flex items-center justify-center animate-pulse">
+          <span className="absolute top-1 right-1 w-4 h-4 bg-rose-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-white">
             {unreadCount}
           </span>
         )}
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 p-4 space-y-3">
-          <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Notifications</span>
-            <span className="text-[10px] text-slate-400 font-mono">{notifications.length} recent</span>
+        <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden">
+          <div className="p-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+            <span className="text-xs font-bold text-slate-900">Notifications</span>
+            {unreadCount > 0 && (
+              <button
+                onClick={markAllAsRead}
+                className="text-[10px] font-semibold text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer"
+              >
+                <Check size={11} /> Mark all read
+              </button>
+            )}
           </div>
 
-          <div className="space-y-2 max-h-64 overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
+          <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
             {notifications.length === 0 ? (
-              <p className="text-xs text-slate-400 italic py-4 text-center">No notifications yet.</p>
+              <p className="text-xs text-slate-400 italic py-6 text-center">No notifications yet.</p>
             ) : (
               notifications.map((n) => (
                 <div
                   key={n.id}
-                  className={`p-2.5 rounded-xl border text-xs space-y-1 transition-colors ${
-                    n.is_read ? 'bg-slate-50 border-slate-200 text-slate-600' : 'bg-emerald-50/60 border-emerald-200 text-slate-900 font-medium'
-                  }`}
+                  className={`p-3 text-xs transition-colors ${n.is_read ? 'bg-white' : 'bg-slate-50/80 font-medium'}`}
                 >
-                  <div className="flex justify-between items-start">
-                    <span className="font-bold text-slate-900 text-[11px] leading-snug">{n.title}</span>
-                    <span className="text-[9px] text-slate-400 font-mono shrink-0 ml-2">
+                  <div className="flex items-start justify-between gap-1">
+                    <span className="font-bold text-slate-900">{n.title}</span>
+                    <span className="text-[9px] text-slate-400 font-mono">
                       {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-600 leading-relaxed">{n.message}</p>
+                  <p className="text-slate-600 text-[11px] mt-0.5 leading-relaxed">{n.message}</p>
+                  {n.link && (
+                    <Link
+                      href={n.link}
+                      onClick={() => setIsOpen(false)}
+                      className="text-[10px] font-bold text-slate-900 hover:underline mt-1 inline-flex items-center gap-1"
+                    >
+                      View details <ExternalLink size={10} />
+                    </Link>
+                  )}
                 </div>
               ))
             )}

@@ -1,121 +1,119 @@
 'use client'
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import ProjectFileManager from '@/components/ProjectFileManager';
 import NotificationBell from '@/components/NotificationBell';
 import VisualFeedbackCanvas from '@/components/VisualFeedbackCanvas';
+import SlackWorkspaceChat from '@/components/SlackWorkspaceChat';
+import { 
+  FolderKanban, 
+  FileCheck2, 
+  CreditCard, 
+  MessageSquare, 
+  Layers, 
+  CheckCircle2, 
+  Clock, 
+  ExternalLink 
+} from 'lucide-react';
 
 export default function ClientDashboard() {
   const [projects, setProjects] = useState<any[]>([]);
-  const [feedbacks, setFeedbacks] = useState<Record<string, any[]>>({});
+  const [tasks, setTasks] = useState<Record<string, any[]>>({});
   const [invoices, setInvoices] = useState<Record<string, any[]>>({});
-  const [newFeedback, setNewFeedback] = useState<Record<string, string>>({});
+  const [activeProjectTab, setActiveProjectTab] = useState<Record<string, 'overview' | 'tasks' | 'files' | 'invoices' | 'slack' | 'canvas'>>({});
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
   const router = useRouter();
 
-  const loadData = async () => {
-    const { data: { user: currentUser } } = await supabase.auth.getUser();
-    if (!currentUser) {
-      router.push('/login');
-      return;
-    }
-    setUser(currentUser);
-
-    const { data: prof } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', currentUser.id)
-      .single();
-    setProfile(prof);
-
-    // Fetch projects assigned to this client
-    const { data: projData } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('client_id', currentUser.id)
-      .order('created_at', { ascending: false });
-
-    if (projData && projData.length > 0) {
-      setProjects(projData);
-      const projectIds = projData.map((p) => p.id);
-
-      // Fetch feedbacks for client's projects
-      const { data: fbData } = await supabase
-        .from('project_feedbacks')
-        .select('*')
-        .in('project_id', projectIds)
-        .order('created_at', { ascending: true });
-
-      if (fbData) {
-        const groupedFb: Record<string, any[]> = {};
-        fbData.forEach((fb) => {
-          if (!groupedFb[fb.project_id]) groupedFb[fb.project_id] = [];
-          groupedFb[fb.project_id].push(fb);
-        });
-        setFeedbacks(groupedFb);
+  const loadData = useCallback(async () => {
+    try {
+      const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
+      if (authError || !currentUser) {
+        await supabase.auth.signOut();
+        router.push('/login');
+        return;
       }
+      setUser(currentUser);
 
-      // Fetch Invoices for client's projects
-      const { data: invData } = await supabase
-        .from('project_invoices')
+      const { data: prof } = await supabase
+        .from('profiles')
         .select('*')
-        .in('project_id', projectIds)
+        .eq('id', currentUser.id)
+        .single();
+      setProfile(prof);
+
+      const { data: projData } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('client_id', currentUser.id)
         .order('created_at', { ascending: false });
 
-      if (invData) {
-        const groupedInv: Record<string, any[]> = {};
-        invData.forEach((inv) => {
-          if (!groupedInv[inv.project_id]) groupedInv[inv.project_id] = [];
-          groupedInv[inv.project_id].push(inv);
-        });
-        setInvoices(groupedInv);
+      if (projData && projData.length > 0) {
+        setProjects(projData);
+        const projectIds = projData.map((p) => p.id);
+
+        const { data: taskData } = await supabase
+          .from('project_tasks')
+          .select('*')
+          .in('project_id', projectIds)
+          .order('position', { ascending: true });
+
+        if (taskData) {
+          const groupedTasks: Record<string, any[]> = {};
+          taskData.forEach((t) => {
+            if (!groupedTasks[t.project_id]) groupedTasks[t.project_id] = [];
+            groupedTasks[t.project_id].push(t);
+          });
+          setTasks(groupedTasks);
+        }
+
+        const { data: invData } = await supabase
+          .from('project_invoices')
+          .select('*')
+          .in('project_id', projectIds)
+          .order('created_at', { ascending: false });
+
+        if (invData) {
+          const groupedInv: Record<string, any[]> = {};
+          invData.forEach((inv) => {
+            if (!groupedInv[inv.project_id]) groupedInv[inv.project_id] = [];
+            groupedInv[inv.project_id].push(inv);
+          });
+          setInvoices(groupedInv);
+        }
+      } else {
+        setProjects([]);
       }
-    } else {
-      setProjects([]);
+
+      const { data: annoData } = await supabase
+        .from('studio_announcements')
+        .select('*')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+      if (annoData) setAnnouncements(annoData);
+    } catch (err) {
+      console.error('Error loading client portal:', err);
+    } finally {
+      setLoading(false);
     }
-
-    // Active Global Broadcasts
-    const { data: annoData } = await supabase
-      .from('studio_announcements')
-      .select('*')
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
-    if (annoData) setAnnouncements(annoData);
-
-    setLoading(false);
-  };
+  }, [router]);
 
   useEffect(() => {
     loadData();
-
-    const channel = supabase
-      .channel('client_master_stream')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_feedbacks' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_invoices' }, () => loadData())
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [router]);
+  }, [loadData]);
 
   const handleUpdateSignoff = async (proj: any, decision: 'Approved' | 'Changes Requested') => {
     const confirmMsg = decision === 'Approved'
-      ? 'Sign off and approve this deliverable as completed?'
-      : 'Request revisions from the studio team? This will consume 1 revision credit.';
+      ? 'Sign off and approve this deliverable milestone as completed?'
+      : 'Request revisions from our engineering team? This will consume 1 revision credit.';
 
     if (!confirm(confirmMsg)) return;
 
     let updatedRevisions = proj.used_revisions || 0;
-    if (decision === 'Changes Requested') {
-      updatedRevisions += 1;
-    }
+    if (decision === 'Changes Requested') updatedRevisions += 1;
 
     const { error } = await supabase
       .from('projects')
@@ -126,110 +124,46 @@ export default function ClientDashboard() {
       .eq('id', proj.id);
 
     if (!error) {
-      await supabase.from('studio_activity_logs').insert([
-        {
-          project_id: proj.id,
-          actor_name: profile?.full_name || 'Client',
-          action: `Deliverable milestone marked as: ${decision}`,
-        },
-      ]);
       loadData();
     } else {
       alert('Error updating milestone: ' + error.message);
     }
   };
 
-  const handlePurchaseExtraRevisions = async (proj: any) => {
-    const confirmed = confirm('Your revision limit is reached. Generate an invoice of ₹4,999 for 2 additional revisions?');
-    if (!confirmed) return;
-
-    const { error } = await supabase.from('project_invoices').insert([
-      {
-        project_id: proj.id,
-        invoice_number: `INV-REV-${Date.now().toString().slice(-4)}`,
-        amount: 4999,
-        description: 'Scope Add-on: 2 Extra Project Revisions Pack',
-        status: 'Unpaid',
-      },
-    ]);
-
-    if (!error) {
-      await supabase
-        .from('projects')
-        .update({ max_revisions: (proj.max_revisions || 3) + 2 })
-        .eq('id', proj.id);
-
-      alert('Add-on revision invoice generated! You can now request further changes.');
-      loadData();
-    } else {
-      alert('Failed to generate add-on invoice: ' + error.message);
-    }
-  };
-
-  const handleSendFeedback = async (projectId: string | number) => {
-    const text = newFeedback[projectId]?.trim();
-    if (!text || !user) return;
-
-    setSending(true);
-    const { error } = await supabase.from('project_feedbacks').insert([
-      {
-        project_id: projectId,
-        client_id: user.id,
-        message: text,
-      },
-    ]);
-
-    setSending(false);
-    if (!error) {
-      setNewFeedback({ ...newFeedback, [projectId]: '' });
-      loadData();
-    } else {
-      alert('Error sending message: ' + error.message);
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans antialiased selection:bg-emerald-100 selection:text-emerald-900">
-      {/* Broadcast Announcement Bar */}
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans antialiased selection:bg-black selection:text-white">
       {announcements.length > 0 && (
-        <div className="bg-emerald-50 border-b border-emerald-200 px-4 py-2.5 text-xs flex items-center justify-between text-emerald-900">
-          <div className="flex items-center gap-2.5 max-w-5xl truncate">
-            <span className="bg-emerald-600 text-white font-bold text-[10px] uppercase px-2 py-0.5 rounded-full tracking-wide">
-              Notice
-            </span>
-            <span className="font-medium truncate">{announcements[0].message}</span>
-          </div>
+        <div className="bg-emerald-50 border-b border-emerald-200 px-3 py-2 text-[11px] flex items-center gap-2 text-emerald-950">
+          <span className="bg-emerald-700 text-white font-bold text-[9px] uppercase px-1.5 py-0.2 rounded-full">
+            Notice
+          </span>
+          <span className="truncate">{announcements[0].message}</span>
         </div>
       )}
 
-      {/* Top Header */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {/* Official Askus Studio Logo */}
-            <div className="w-9 h-9 rounded-lg overflow-hidden border border-slate-200 shadow-xs flex items-center justify-center shrink-0 select-none bg-white">
-              <img
-                src="/logo/site-logo.jpg"
-                alt="Askus Studio"
-                className="w-full h-full object-cover"
-              />
+      {/* Header */}
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-black text-white flex items-center justify-center font-black text-xs shrink-0">
+              A
             </div>
-            <div>
-              <h1 className="text-xs sm:text-sm font-bold text-slate-900 tracking-wide uppercase flex items-center gap-2">
-                CLIENT PORTAL
-                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  Workspace
+            <div className="truncate">
+              <h1 className="text-xs sm:text-sm font-bold text-slate-900 tracking-tight truncate flex items-center gap-1.5">
+                Client Portal
+                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase">
+                  External
                 </span>
               </h1>
-              <p className="text-[11px] text-slate-500">Welcome, {profile?.full_name || 'Client'}</p>
+              <p className="text-[10px] text-slate-400 hidden sm:block">Deliverables & Approvals</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {user && <NotificationBell userId={user.id} />}
             <button
               onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-all cursor-pointer"
+              className="px-2 py-1 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer"
             >
               Logout
             </button>
@@ -237,229 +171,204 @@ export default function ClientDashboard() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
+        {/* KPI Strip */}
+        <section className="grid grid-cols-3 gap-2 sm:gap-3.5">
+          <div className="bg-white border border-slate-200 rounded-xl p-3 text-center sm:text-left">
+            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase block">Projects</span>
+            <span className="text-base sm:text-2xl font-black text-slate-900 mt-0.5 block">{projects.length}</span>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-xl p-3 text-center sm:text-left">
+            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase block">Finished</span>
+            <span className="text-base sm:text-2xl font-black text-emerald-700 mt-0.5 block">
+              {projects.filter((p) => p.status === 'Completed' || p.progress === 100).length}
+            </span>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-xl p-3 text-center sm:text-left">
+            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase block">Invoices</span>
+            <span className="text-base sm:text-2xl font-black text-amber-700 mt-0.5 block">
+              {Object.values(invoices).flat().filter((i) => i.status !== 'Paid').length}
+            </span>
+          </div>
+        </section>
+
         {loading ? (
-          <div className="py-24 text-center text-xs text-slate-400 font-mono">Loading your project workspace...</div>
+          <div className="py-20 text-center text-xs text-slate-400 font-mono">Synchronizing workspace...</div>
         ) : projects.length === 0 ? (
-          <div className="bg-white border border-dashed border-slate-200 p-12 rounded-2xl text-center space-y-3 shadow-xs">
-            <h3 className="text-base font-bold text-slate-900">No Active Projects Found</h3>
-            <p className="text-xs text-slate-500 max-w-md mx-auto">
-              Your account is active. Once our administration team allocates a project to your account, live deliverables and milestones will appear here.
-            </p>
+          <div className="bg-white border border-dashed border-slate-200 p-8 rounded-xl text-center text-xs text-slate-400">
+            No active projects connected to your account.
           </div>
         ) : (
-          <div className="space-y-8">
+          <div className="space-y-4 sm:space-y-6">
             {projects.map((proj) => {
               const projInvoices = invoices[proj.id] || [];
-              const projFeedbacks = feedbacks[proj.id] || [];
+              const projTasks = tasks[proj.id] || [];
+              const currentTab = activeProjectTab[proj.id] || 'overview';
               const revisionsExhausted = (proj.used_revisions || 0) >= (proj.max_revisions || 3);
+              const completedTasksCount = projTasks.filter((t) => t.is_completed).length;
 
               return (
-                <div key={proj.id} className="bg-white border border-slate-200/90 rounded-2xl p-6 md:p-8 space-y-6 shadow-xs">
-                  {/* Project Title Header */}
-                  <div className="flex flex-wrap justify-between items-start gap-4 pb-2 border-b border-slate-100">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-xl font-bold text-slate-900">{proj.title}</h2>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
+                <div key={proj.id} className="bg-white border border-slate-200 rounded-xl sm:rounded-2xl p-4 sm:p-5 space-y-4 shadow-2xs">
+                  <div className="flex flex-wrap justify-between items-start gap-2 pb-2 border-b border-slate-100">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h2 className="text-sm sm:text-base font-bold text-slate-900 truncate">{proj.title}</h2>
+                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
                           #{proj.id}
                         </span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          {proj.status}
+                        </span>
                       </div>
-                      <p className="text-xs text-slate-500 mt-1">Live tracking and asset collaboration</p>
                     </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full border bg-slate-50 text-slate-700">
+                      Revisions: {proj.used_revisions || 0} / {proj.max_revisions || 3}
+                    </span>
+                  </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        {proj.status}
-                      </span>
-                      <span className={`text-xs font-mono font-semibold px-2.5 py-1 rounded-full border ${
-                        revisionsExhausted
-                          ? 'bg-rose-50 text-rose-700 border-rose-200'
-                          : 'bg-slate-100 text-slate-600 border-slate-200'
-                      }`}>
-                        Revisions: {proj.used_revisions || 0} / {proj.max_revisions || 3}
-                      </span>
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] font-mono">
+                      <span className="text-slate-500 font-sans">Sprint Completion</span>
+                      <span className="font-bold text-slate-900">{proj.progress}%</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-black transition-all" style={{ width: `${proj.progress}%` }} />
                     </div>
                   </div>
 
-                  {/* Progress Line */}
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-xs font-mono">
-                      <span className="text-slate-500 uppercase tracking-wider font-semibold">Completion Status</span>
-                      <span className="text-emerald-700 font-bold">{proj.progress}%</span>
-                    </div>
-                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-emerald-600 transition-all duration-300"
-                        style={{ width: `${proj.progress}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Milestones & Deliverables Preview */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                        Current Milestone / Next Action
-                      </span>
-                      <p className="text-xs text-slate-800 font-medium">
-                        {proj.pending_tasks || 'Ongoing sprint work'}
+                  {/* Sign-Off Action Card (Mobile Stacks) */}
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase block">Milestone Status</span>
+                      <p className="text-xs font-semibold text-slate-800 mt-0.5">
+                        Approval: <strong className="uppercase">{proj.client_signoff || 'Pending'}</strong>
                       </p>
                     </div>
 
-                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1 flex flex-col justify-between">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                        Project Deliverable / Preview Link
-                      </span>
-                      {proj.preview_url ? (
-                        <a
-                          href={proj.preview_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs font-bold text-emerald-700 hover:underline flex items-center gap-1.5 truncate"
-                        >
-                          ↗ Open Deliverable Link ({proj.preview_url})
-                        </a>
-                      ) : (
-                        <span className="text-xs text-slate-400 italic">Deliverable will be posted here upon review</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Visual Frame Pin Feedback Canvas */}
-                  {proj.preview_url && user && (
-                    <div className="border-t border-slate-100 pt-5">
-                      <VisualFeedbackCanvas
-                        projectId={proj.id}
-                        userId={user.id}
-                        previewUrl={proj.preview_url}
-                      />
-                    </div>
-                  )}
-
-                  {/* Milestone Official Sign-Off with Scope Creep Blocker */}
-                  <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <span className="text-xs font-bold text-slate-800 block">Milestone Approval & Sign-Off</span>
-                      <span className="text-[11px] text-slate-500">
-                        Current Status: <strong className="text-slate-700">{proj.client_signoff || 'Pending Review'}</strong> • Credits: <strong>{proj.used_revisions || 0} / {proj.max_revisions || 3} used</strong>
-                      </span>
-                    </div>
-
-                    <div className="flex gap-2">
-                      {revisionsExhausted ? (
-                        <button
-                          onClick={() => handlePurchaseExtraRevisions(proj)}
-                          className="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-xs transition-colors cursor-pointer"
-                        >
-                          ⚡ Purchase Extra Revisions (₹4,999)
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleUpdateSignoff(proj, 'Changes Requested')}
-                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 transition-colors cursor-pointer"
-                        >
-                          🔄 Request Changes
-                        </button>
-                      )}
-
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => handleUpdateSignoff(proj, 'Changes Requested')}
+                        disabled={revisionsExhausted}
+                        className="flex-1 sm:flex-none px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-300 text-slate-800 cursor-pointer disabled:opacity-50"
+                      >
+                        Changes
+                      </button>
                       <button
                         onClick={() => handleUpdateSignoff(proj, 'Approved')}
-                        className="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors cursor-pointer"
+                        className="flex-1 sm:flex-none px-3 py-1.5 rounded-lg text-xs font-bold bg-black text-white cursor-pointer"
                       >
-                        ✅ Approve & Sign Off
+                        Approve ✓
                       </button>
                     </div>
                   </div>
 
-                  {/* Project Assets & Files */}
-                  <div className="border-t border-slate-100 pt-5">
-                    {user && (
-                      <ProjectFileManager projectId={proj.id} userId={user.id} canUpload={true} />
-                    )}
-                  </div>
-
-                  {/* Invoices & Billing Strip */}
-                  <div className="border-t border-slate-100 pt-5 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">💳 Invoices & Payments</h3>
-                      <span className="text-xs font-mono text-slate-500">{projInvoices.length} Bills</span>
+                  {/* Sub-tabs Horizontal Scroll */}
+                  <div className="border-t border-slate-100 pt-3 space-y-3">
+                    <div className="flex gap-1 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden">
+                      {[
+                        { key: 'overview', label: '📌 Overview', icon: Layers },
+                        { key: 'tasks', label: `🎯 Tasks (${completedTasksCount}/${projTasks.length})`, icon: FolderKanban },
+                        { key: 'files', label: '📁 Files', icon: FileCheck2 },
+                        { key: 'invoices', label: `💳 Invoices (${projInvoices.length})`, icon: CreditCard },
+                        { key: 'slack', label: '💬 Slack', icon: MessageSquare },
+                        ...(proj.preview_url ? [{ key: 'canvas', label: '🎨 Feedback', icon: ExternalLink }] : []),
+                      ].map((tab) => {
+                        const Icon = tab.icon;
+                        const isActive = currentTab === tab.key;
+                        return (
+                          <button
+                            key={tab.key}
+                            onClick={() => setActiveProjectTab({ ...activeProjectTab, [proj.id]: tab.key as any })}
+                            className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap cursor-pointer transition-colors ${
+                              isActive ? 'bg-black text-white' : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            <Icon size={12} />
+                            <span>{tab.label}</span>
+                          </button>
+                        );
+                      })}
                     </div>
 
-                    {projInvoices.length === 0 ? (
-                      <p className="text-xs text-slate-400 italic py-1">No pending invoices for this project.</p>
-                    ) : (
-                      <div className="divide-y divide-slate-100">
-                        {projInvoices.map((inv) => (
-                          <div key={inv.id} className="py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold text-slate-900">{inv.invoice_number}</span>
-                                <span className="text-emerald-700 font-semibold">₹{Number(inv.amount).toLocaleString()}</span>
-                              </div>
-                              <p className="text-[10px] text-slate-500">{inv.description || 'Deliverable fee'}</p>
-                            </div>
+                    {currentTab === 'overview' && (
+                      <div className="space-y-2 pt-1 text-xs">
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase block">Sprint Focus</span>
+                          <p className="text-slate-800 font-medium">{proj.pending_tasks || 'Ongoing deliverable sprint'}</p>
+                        </div>
+                        {proj.preview_url && (
+                          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase block">Live Staging Preview</span>
+                            <a href={proj.preview_url} target="_blank" rel="noreferrer" className="font-bold text-slate-900 underline flex items-center gap-1 truncate">
+                              <ExternalLink size={12} /> {proj.preview_url}
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-                            <div className="flex items-center gap-2">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                                inv.status === 'Paid'
-                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                  : 'bg-amber-50 text-amber-800 border-amber-200'
+                    {currentTab === 'tasks' && (
+                      <div className="space-y-2 pt-1">
+                        {projTasks.length === 0 ? (
+                          <p className="text-xs text-slate-400 italic text-center py-2">No tasks listed.</p>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                            {projTasks.map((t) => (
+                              <div key={t.id} className="p-2.5 rounded-lg border bg-white border-slate-200 flex items-center justify-between text-xs gap-2">
+                                <div className="flex items-center gap-2 truncate">
+                                  {t.is_completed ? <CheckCircle2 size={14} className="text-emerald-600 shrink-0" /> : <Clock size={14} className="text-amber-500 shrink-0" />}
+                                  <span className={`truncate ${t.is_completed ? 'line-through text-slate-400' : 'text-slate-800'}`}>{t.title || t.task_title}</span>
+                                </div>
+                                <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-slate-100 text-slate-500 shrink-0">{t.status || 'To Do'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {currentTab === 'files' && user && (
+                      <ProjectFileManager projectId={proj.id} userId={user.id} canUpload={true} />
+                    )}
+
+                    {currentTab === 'invoices' && (
+                      <div className="space-y-2 pt-1">
+                        {projInvoices.length === 0 ? (
+                          <p className="text-xs text-slate-400 italic text-center py-2">No invoices issued.</p>
+                        ) : (
+                          projInvoices.map((inv) => (
+                            <div key={inv.id} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between text-xs gap-2">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-bold text-slate-900">{inv.invoice_number}</span>
+                                  <span className="font-bold text-emerald-700">₹{Number(inv.amount).toLocaleString()}</span>
+                                </div>
+                                <p className="text-[10px] text-slate-500 truncate">{inv.description || 'Milestone fee'}</p>
+                              </div>
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-bold border shrink-0 ${
+                                inv.status === 'Paid' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-amber-50 text-amber-800 border-amber-200'
                               }`}>
                                 {inv.status}
                               </span>
-                              {inv.status !== 'Paid' && (
-                                <button
-                                  onClick={() => alert('Please complete the bank transfer / UPI payment to our studio account. Mark as paid will be reflected after verification.')}
-                                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[11px] cursor-pointer shadow-xs"
-                                >
-                                  Pay Now
-                                </button>
-                              )}
                             </div>
-                          </div>
-                        ))}
+                          ))
+                        )}
                       </div>
                     )}
-                  </div>
 
-                  {/* Feedback & Discussion Channel */}
-                  <div className="border-t border-slate-100 pt-5 space-y-3">
-                    <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">💬 Project Notes & Feedback</h3>
-
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 max-h-48 overflow-y-auto space-y-2.5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
-                      {projFeedbacks.length === 0 ? (
-                        <p className="text-xs text-slate-400 italic">No notes or revision requests yet. Leave a message below for the lead developer.</p>
-                      ) : (
-                        projFeedbacks.map((fb) => (
-                          <div key={fb.id} className="bg-white p-3 rounded-lg border border-slate-200/80 text-xs space-y-1">
-                            <p className="text-slate-800">{fb.message}</p>
-                            <span className="text-[10px] text-slate-400 block font-mono">
-                              {new Date(fb.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {new Date(fb.created_at).toLocaleDateString()}
-                            </span>
-                          </div>
-                        ))
-                      )}
-                    </div>
-
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Type a revision request or feedback message..."
-                        value={newFeedback[proj.id] || ''}
-                        onChange={(e) => setNewFeedback({ ...newFeedback, [proj.id]: e.target.value })}
-                        onKeyDown={(e) => { if (e.key === 'Enter') handleSendFeedback(proj.id); }}
-                        className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white transition-all"
+                    {currentTab === 'slack' && user && (
+                      <SlackWorkspaceChat
+                        currentUser={{
+                          id: user.id,
+                          full_name: profile?.full_name || 'Client',
+                          role: 'client',
+                        }}
                       />
-                      <button
-                        type="button"
-                        disabled={sending}
-                        onClick={() => handleSendFeedback(proj.id)}
-                        className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
-                      >
-                        {sending ? 'Posting...' : 'Send'}
-                      </button>
-                    </div>
+                    )}
+
+                    {currentTab === 'canvas' && proj.preview_url && user && (
+                      <VisualFeedbackCanvas projectId={proj.id} userId={user.id} previewUrl={proj.preview_url} />
+                    )}
                   </div>
                 </div>
               );

@@ -1,10 +1,12 @@
 'use client'
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import ProjectFileManager from '@/components/ProjectFileManager';
 import ProjectTimeTracker from '@/components/ProjectTimeTracker';
 import NotificationBell from '@/components/NotificationBell';
+import SlackWorkspaceChat from '@/components/SlackWorkspaceChat';
+import { FolderKanban, MessageSquare, ShieldCheck, CheckCircle2, Clock, ExternalLink } from 'lucide-react';
 
 export default function EmployeeDashboard() {
   const [profile, setProfile] = useState<any>(null);
@@ -13,21 +15,26 @@ export default function EmployeeDashboard() {
   const [tasks, setTasks] = useState<Record<string, any[]>>({});
   const [internalNotes, setInternalNotes] = useState<Record<string, any[]>>({});
   const [activeTab, setActiveTab] = useState<Record<string, 'tasks' | 'notes' | 'files' | 'timelog'>>({});
+  const [mainView, setMainView] = useState<'workspaces' | 'slack'>('workspaces');
   const [newTaskTitle, setNewTaskTitle] = useState<Record<string, string>>({});
   const [newNoteText, setNewNoteText] = useState<Record<string, string>>({});
 
-  // Live Shift Stopwatch States
+  // Shift Stopwatch State
   const [timerActive, setTimerActive] = useState<Record<string, boolean>>({});
   const [timerSeconds, setTimerSeconds] = useState<Record<string, number>>({});
   const [timerNotes, setTimerNotes] = useState<Record<string, string>>({});
   const [timerSaving, setTimerSaving] = useState(false);
 
+  // Proof of Work Modal State
+  const [submittingProofTask, setSubmittingProofTask] = useState<any | null>(null);
+  const [proofUrl, setProofUrl] = useState('');
+  const [proofNotes, setProofNotes] = useState('');
+  const [proofLoading, setProofLoading] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [editingProj, setEditingProj] = useState<any | null>(null);
-  const [saving, setSaving] = useState(false);
+
   const router = useRouter();
 
-  // Stopwatch ticking interval
+  // Stopwatch ticking
   useEffect(() => {
     const activeProjectIds = Object.keys(timerActive).filter((id) => timerActive[id]);
     if (activeProjectIds.length === 0) return;
@@ -66,14 +73,15 @@ export default function EmployeeDashboard() {
 
     setTimerSaving(true);
     const hours = Number((secs / 3600).toFixed(2));
-    const desc = timerNotes[projectId]?.trim() || 'Sprint Task Session';
+    const desc = timerNotes[projectId]?.trim() || 'Verified Sprint Session';
 
     const { error } = await supabase.from('project_time_logs').insert([
       {
-        project_id: projectId,
-        employee_id: user.id,
+        project_id: Number(projectId) || projectId,
+        employee_id: user?.id,
         hours_logged: hours,
         description: desc,
+        is_verified: true,
       },
     ]);
 
@@ -84,133 +92,147 @@ export default function EmployeeDashboard() {
       setTimerNotes({ ...timerNotes, [projectId]: '' });
       alert(`Shift successfully logged: ${hours} hrs.`);
     } else {
-      alert('Error logging shift hours: ' + error.message);
+      alert('Error logging shift: ' + error.message);
     }
   };
 
-  const fetchEmployeeData = async () => {
-    const { data: { user: currentUser } } = await supabase.auth.getUser();
-    if (!currentUser) {
-      router.push('/login');
-      return;
-    }
-    setUser(currentUser);
+  const fetchEmployeeData = useCallback(async () => {
+    try {
+      const { data: { user: currentUser }, error: authError } = await supabase.auth.getUser();
+      if (authError || !currentUser) {
+        await supabase.auth.signOut();
+        router.push('/login');
+        return;
+      }
+      setUser(currentUser);
 
-    const { data: prof } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', currentUser.id)
-      .single();
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', currentUser.id)
+        .single();
 
-    const employeeRoles = ['director', 'senior_manager', 'manager', 'executive', 'intern', 'employee', 'admin'];
-    if (!prof || !employeeRoles.includes(prof.role)) {
-      router.push('/login');
-      return;
-    }
+      if (!prof) {
+        router.push('/login');
+        return;
+      }
+      setProfile(prof);
 
-    setProfile(prof);
+      // Projects where user is owner / lead
+      const { data: leadProjects } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('assigned_to', currentUser.id);
 
-    // Fetch projects assigned to this employee
-    const { data: projs } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('assigned_to', currentUser.id)
-      .order('created_at', { ascending: false });
-
-    if (projs && projs.length > 0) {
-      setAssignedProjects(projs);
-      const projectIds = projs.map((p) => p.id);
-
-      // Fetch Tasks
-      const { data: taskData } = await supabase
+      // Tasks directly assigned to this employee
+      const { data: myAssignedTasks } = await supabase
         .from('project_tasks')
         .select('*')
-        .in('project_id', projectIds)
-        .order('created_at', { ascending: true });
+        .eq('assigned_to', currentUser.id);
 
-      if (taskData) {
+      const taskProjectIds = (myAssignedTasks || []).map((t) => t.project_id);
+      const leadProjectIds = (leadProjects || []).map((p) => p.id);
+      const allUniqueProjectIds = Array.from(new Set([...leadProjectIds, ...taskProjectIds]));
+
+      if (allUniqueProjectIds.length > 0) {
+        const { data: allProjs } = await supabase
+          .from('projects')
+          .select('*')
+          .in('id', allUniqueProjectIds)
+          .order('created_at', { ascending: false });
+
+        if (allProjs) setAssignedProjects(allProjs);
+
         const groupedTasks: Record<string, any[]> = {};
-        taskData.forEach((t) => {
+        (myAssignedTasks || []).forEach((t) => {
           if (!groupedTasks[t.project_id]) groupedTasks[t.project_id] = [];
           groupedTasks[t.project_id].push(t);
         });
         setTasks(groupedTasks);
-      }
 
-      // Fetch Studio Internal Notes
-      const { data: notesData } = await supabase
-        .from('project_internal_notes')
-        .select(`
-          id,
-          project_id,
-          note,
-          created_at,
-          author:profiles(full_name, role)
-        `)
-        .in('project_id', projectIds)
-        .order('created_at', { ascending: true });
+        const { data: notesData } = await supabase
+          .from('project_internal_notes')
+          .select(`id, project_id, note, created_at, author:profiles(full_name, role)`)
+          .in('project_id', allUniqueProjectIds)
+          .order('created_at', { ascending: true });
 
-      if (notesData) {
-        const groupedNotes: Record<string, any[]> = {};
-        notesData.forEach((n: any) => {
-          if (!groupedNotes[n.project_id]) groupedNotes[n.project_id] = [];
-          groupedNotes[n.project_id].push(n);
-        });
-        setInternalNotes(groupedNotes);
+        if (notesData) {
+          const groupedNotes: Record<string, any[]> = {};
+          notesData.forEach((n: any) => {
+            if (!groupedNotes[n.project_id]) groupedNotes[n.project_id] = [];
+            groupedNotes[n.project_id].push(n);
+          });
+          setInternalNotes(groupedNotes);
+        }
+      } else {
+        setAssignedProjects([]);
+        setTasks({});
       }
-    } else {
-      setAssignedProjects([]);
+    } catch (err) {
+      console.error('Error fetching employee dashboard:', err);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
-  };
+  }, [router]);
 
   useEffect(() => {
     fetchEmployeeData();
+  }, [fetchEmployeeData]);
 
-    // Realtime listener for live sync
-    const channel = supabase
-      .channel('employee_live_channel')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => fetchEmployeeData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_tasks' }, () => fetchEmployeeData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_internal_notes' }, () => fetchEmployeeData())
-      .subscribe();
+  // Anti-Cheat: Task completion modal open
+  const handleInitiateTaskCompletion = (task: any, projectId: string | number) => {
+    if (task.is_completed) return;
+    if (task.status === 'Under Review') {
+      alert('Aapka proof already submit ho chuka hai aur Admin review ke liye pending hai.');
+      return;
+    }
+    setSubmittingProofTask({ ...task, currentProjectId: projectId });
+    setProofUrl(task.proof_url || '');
+    setProofNotes(task.proof_notes || '');
+  };
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [router]);
-
-  const handleUpdateProject = async (e: React.FormEvent) => {
+  const handleSubmitProofOfWork = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingProj) return;
-    setSaving(true);
+    if (!submittingProofTask || !proofUrl.trim()) {
+      alert('Deliverable / PR / Staging link dena mandatory hai!');
+      return;
+    }
 
+    setProofLoading(true);
     const { error } = await supabase
-      .from('projects')
+      .from('project_tasks')
       .update({
-        status: editingProj.status,
-        progress: Number(editingProj.progress),
-        pending_tasks: editingProj.pending_tasks,
+        status: 'Under Review',
+        proof_url: proofUrl.trim(),
+        proof_notes: proofNotes.trim(),
+        proof_submitted_at: new Date().toISOString(),
+        is_completed: false,
       })
-      .eq('id', editingProj.id);
+      .eq('id', submittingProofTask.id);
 
-    setSaving(false);
+    setProofLoading(false);
     if (!error) {
-      setEditingProj(null);
+      alert('Proof submit ho gaya hai! Admin review karke verify karega.');
+      setSubmittingProofTask(null);
       fetchEmployeeData();
     } else {
-      alert('Error updating project: ' + error.message);
+      alert('Error: ' + error.message);
     }
   };
 
   const handleAddTask = async (projectId: string | number) => {
-    const title = newTaskTitle[projectId]?.trim();
-    if (!title || !user) return;
+    const titleText = newTaskTitle[projectId]?.trim();
+    if (!titleText || !user) return;
 
     const { data, error } = await supabase
       .from('project_tasks')
-      .insert([{ project_id: projectId, task_title: title, title: title, assigned_to: user.id }])
+      .insert([{ 
+        project_id: Number(projectId) || projectId, 
+        title: titleText, 
+        status: 'To Do', 
+        is_completed: false, 
+        assigned_to: user.id 
+      }])
       .select()
       .single();
 
@@ -220,25 +242,6 @@ export default function EmployeeDashboard() {
         [projectId]: [...(prev[projectId] || []), data],
       }));
       setNewTaskTitle({ ...newTaskTitle, [projectId]: '' });
-    } else if (error) {
-      alert('Error creating task: ' + error.message);
-    }
-  };
-
-  const handleToggleTask = async (taskId: number, projectId: string | number, currentStatus: boolean) => {
-    const nextStatus = !currentStatus;
-    const { error } = await supabase
-      .from('project_tasks')
-      .update({ is_completed: nextStatus })
-      .eq('id', taskId);
-
-    if (!error) {
-      setTasks((prev) => ({
-        ...prev,
-        [projectId]: (prev[projectId] || []).map((t) =>
-          t.id === taskId ? { ...t, is_completed: nextStatus } : t
-        ),
-      }));
     }
   };
 
@@ -253,426 +256,379 @@ export default function EmployeeDashboard() {
     if (!error) {
       setNewNoteText({ ...newNoteText, [projectId]: '' });
       fetchEmployeeData();
-    } else {
-      alert('Error posting internal note: ' + error.message);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans antialiased selection:bg-emerald-100 selection:text-emerald-900">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans antialiased">
       {/* Top Header */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {/* Official Askus Studio Logo */}
-            <div className="w-9 h-9 rounded-lg overflow-hidden border border-slate-200 shadow-xs flex items-center justify-center shrink-0 select-none bg-white">
-              <img
-                src="/logo/site-logo.jpg"
-                alt="Askus Studio"
-                className="w-full h-full object-cover"
-              />
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg overflow-hidden border border-slate-200 flex items-center justify-center shrink-0 bg-white">
+              <img src="/logo/site-logo.jpg" alt="Askus" className="w-full h-full object-cover" />
             </div>
-            <div>
-              <h1 className="text-xs sm:text-sm font-bold text-slate-900 tracking-wide uppercase flex items-center gap-2">
-                EMPLOYEE WORKSPACE
-                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase">
+            <div className="truncate">
+              <h1 className="text-xs sm:text-sm font-bold text-slate-900 uppercase flex items-center gap-1.5 truncate">
+                WORKSPACE
+                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase">
                   {profile?.role?.replace('_', ' ') || 'Team'}
                 </span>
               </h1>
-              <p className="text-[11px] text-slate-500">Welcome back, {profile?.full_name || 'Team Member'}</p>
+              <p className="text-[10px] text-slate-500 truncate">{profile?.full_name || 'Team Member'}</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {user && <NotificationBell userId={user.id} />}
             <button
               onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-all cursor-pointer"
+              className="px-2.5 py-1 rounded-lg text-xs font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer"
             >
               Logout
             </button>
           </div>
         </div>
+
+        {/* View Switcher Tabs */}
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 flex gap-2 border-t border-slate-100 overflow-x-auto">
+          <button
+            onClick={() => setMainView('workspaces')}
+            className={`flex items-center gap-1.5 py-2.5 px-3 border-b-2 text-xs font-bold whitespace-nowrap cursor-pointer ${
+              mainView === 'workspaces' ? 'border-black text-black' : 'border-transparent text-slate-400'
+            }`}
+          >
+            <FolderKanban size={13} />
+            <span>Tasks & Projects ({assignedProjects.length})</span>
+          </button>
+          <button
+            onClick={() => setMainView('slack')}
+            className={`flex items-center gap-1.5 py-2.5 px-3 border-b-2 text-xs font-bold whitespace-nowrap cursor-pointer ${
+              mainView === 'slack' ? 'border-black text-black' : 'border-transparent text-slate-400'
+            }`}
+          >
+            <MessageSquare size={13} />
+            <span>Slack Live Room</span>
+          </button>
+        </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-7">
-        {/* KPI Strip */}
-        <section className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-          <div className="bg-white border border-slate-200/90 rounded-xl p-4 flex flex-col justify-between shadow-xs">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Assigned Projects</span>
-            <span className="text-2xl font-bold mt-2 text-slate-900 tracking-tight">{assignedProjects.length}</span>
-          </div>
-          <div className="bg-white border border-slate-200/90 rounded-xl p-4 flex flex-col justify-between shadow-xs">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Pending Tasks</span>
-            <span className="text-2xl font-bold mt-2 text-emerald-700 tracking-tight">
-              {Object.values(tasks).flat().filter((t) => !t.is_completed).length} Tasks
-            </span>
-          </div>
-          <div className="bg-white border border-slate-200/90 rounded-xl p-4 flex flex-col justify-between shadow-xs">
-            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Completed Deliverables</span>
-            <span className="text-2xl font-bold mt-2 text-slate-900 tracking-tight">
-              {Object.values(tasks).flat().filter((t) => t.is_completed).length} Done
-            </span>
-          </div>
-        </section>
-
-        {loading ? (
-          <div className="py-24 text-center text-xs text-slate-400 font-mono">Loading your workspace...</div>
+      <main className="max-w-6xl mx-auto px-3 sm:px-6 py-5 sm:py-7 space-y-5">
+        {mainView === 'slack' ? (
+          user && profile && (
+            <SlackWorkspaceChat
+              currentUser={{
+                id: user.id,
+                full_name: profile.full_name || 'Team Member',
+                role: profile.role || 'employee',
+              }}
+            />
+          )
         ) : (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between pb-1">
-              <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Your Assigned Tasks & Projects</h2>
-              <span className="text-xs font-mono text-slate-600 bg-white px-2.5 py-0.5 rounded-full border border-slate-200 shadow-2xs">
-                {assignedProjects.length} Total
-              </span>
-            </div>
+          <>
+            {/* KPI Cards */}
+            <section className="grid grid-cols-3 gap-2 sm:gap-3.5">
+              <div className="bg-white border border-slate-200 rounded-xl p-3 sm:p-4 text-center sm:text-left">
+                <span className="text-[10px] sm:text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Projects</span>
+                <span className="text-lg sm:text-2xl font-bold mt-1 text-slate-900 block">{assignedProjects.length}</span>
+              </div>
+              <div className="bg-white border border-slate-200 rounded-xl p-3 sm:p-4 text-center sm:text-left">
+                <span className="text-[10px] sm:text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Pending</span>
+                <span className="text-lg sm:text-2xl font-bold mt-1 text-emerald-700 block">
+                  {Object.values(tasks).flat().filter((t) => !t.is_completed).length}
+                </span>
+              </div>
+              <div className="bg-white border border-slate-200 rounded-xl p-3 sm:p-4 text-center sm:text-left">
+                <span className="text-[10px] sm:text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Verified</span>
+                <span className="text-lg sm:text-2xl font-bold mt-1 text-slate-900 block">
+                  {Object.values(tasks).flat().filter((t) => t.is_completed).length}
+                </span>
+              </div>
+            </section>
 
-            {assignedProjects.length === 0 ? (
-              <div className="bg-white border border-dashed border-slate-200 p-12 rounded-2xl text-center space-y-3 shadow-xs">
-                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-base">
-                  📂
-                </div>
-                <h3 className="text-sm font-bold text-slate-800">No Projects Allocated Yet</h3>
-                <p className="text-xs text-slate-500 max-w-md mx-auto">
-                  Your team profile is active as <strong className="text-slate-700 uppercase">{profile?.role?.replace('_', ' ')}</strong>. Once the Admin assigns you as the lead for a project, your task sprints, files, and time tracking tabs will appear here.
-                </p>
+            {loading ? (
+              <div className="py-20 text-center text-xs text-slate-400 font-mono">Loading workspace...</div>
+            ) : assignedProjects.length === 0 ? (
+              <div className="bg-white border border-dashed border-slate-200 p-8 rounded-xl text-center text-xs text-slate-400">
+                No active projects assigned yet.
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                 {assignedProjects.map((p) => {
                   const currentTab = activeTab[p.id] || 'tasks';
                   const projTasks = tasks[p.id] || [];
-                  const completedTasksCount = projTasks.filter((t) => t.is_completed).length;
                   const isTiming = timerActive[p.id] || false;
                   const currentSecs = timerSeconds[p.id] || 0;
 
                   return (
-                    <div key={p.id} className="bg-white border border-slate-200/90 rounded-2xl p-6 flex flex-col justify-between space-y-5 shadow-xs hover:border-slate-300 transition-all">
-                      <div className="space-y-4">
-                        {/* Title & Status Header */}
-                        <div className="flex justify-between items-start gap-2">
-                          <div>
-                            <h3 className="font-bold text-base text-slate-900 leading-tight">{p.title}</h3>
-                            <span className="text-[10px] font-mono text-slate-400">Project #{p.id}</span>
-                          </div>
-                          <span className="text-xs font-bold px-3 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
-                            {p.status}
-                          </span>
+                    <div key={p.id} className="bg-white border border-slate-200 rounded-xl sm:rounded-2xl p-4 sm:p-5 space-y-4">
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="min-w-0">
+                          <h3 className="font-bold text-sm sm:text-base text-slate-900 truncate">{p.title}</h3>
+                          <span className="text-[10px] font-mono text-slate-400">PRJ-#{p.id}</span>
+                        </div>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                          {p.status}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs font-mono text-slate-500">
+                          <span className="text-[10px] uppercase">Progress</span>
+                          <span className="font-bold text-slate-900">{p.progress}%</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-black transition-all" style={{ width: `${p.progress}%` }} />
+                        </div>
+                      </div>
+
+                      {/* Sub-tabs */}
+                      <div className="border-t border-slate-100 pt-3 space-y-3">
+                        <div className="grid grid-cols-4 gap-1 p-1 bg-slate-100 rounded-lg text-center">
+                          {[
+                            { key: 'tasks', label: `Tasks (${projTasks.length})` },
+                            { key: 'notes', label: 'Notes' },
+                            { key: 'files', label: 'Files' },
+                            { key: 'timelog', label: 'Timer' },
+                          ].map((t) => (
+                            <button
+                              key={t.key}
+                              type="button"
+                              onClick={() => setActiveTab({ ...activeTab, [p.id]: t.key as any })}
+                              className={`py-1.5 rounded-md text-[10px] sm:text-[11px] font-bold truncate transition-colors cursor-pointer ${
+                                currentTab === t.key ? 'bg-white text-black shadow-2xs' : 'text-slate-500'
+                              }`}
+                            >
+                              {t.label}
+                            </button>
+                          ))}
                         </div>
 
-                        {/* Progress Bar */}
-                        <div>
-                          <div className="flex justify-between text-xs font-mono text-slate-500 mb-1.5">
-                            <span className="uppercase font-semibold text-[10px]">Progress</span>
-                            <span className="text-emerald-700 font-bold">{p.progress}%</span>
-                          </div>
-                          <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                            <div className="h-full bg-emerald-600 transition-all duration-300" style={{ width: `${p.progress}%` }} />
-                          </div>
-                        </div>
-
-                        {/* Current Task Box */}
-                        <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl text-xs text-slate-700">
-                          <span className="text-slate-400 font-bold block mb-1 text-[10px] uppercase">Current Milestone Task:</span>
-                          {p.pending_tasks || 'No immediate blockers listed'}
-                        </div>
-
-                        {/* Update Project Status Button */}
-                        <button
-                          onClick={() => setEditingProj({ ...p })}
-                          className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-xs font-bold rounded-xl transition-all text-slate-700 border border-slate-200 cursor-pointer"
-                        >
-                          Update Project Status ✎
-                        </button>
-
-                        {/* Drawer Tabs */}
-                        <div className="border-t border-slate-100 pt-4 space-y-3">
-                          <div className="grid grid-cols-4 gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200">
-                            <button
-                              type="button"
-                              onClick={() => setActiveTab({ ...activeTab, [p.id]: 'tasks' })}
-                              className={`py-1.5 rounded-lg text-[11px] font-bold transition-all truncate cursor-pointer ${
-                                currentTab === 'tasks' ? 'bg-white text-emerald-800 shadow-2xs font-semibold' : 'text-slate-500 hover:text-slate-900'
-                              }`}
-                            >
-                              Tasks ({completedTasksCount}/{projTasks.length})
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setActiveTab({ ...activeTab, [p.id]: 'notes' })}
-                              className={`py-1.5 rounded-lg text-[11px] font-bold transition-all truncate cursor-pointer ${
-                                currentTab === 'notes' ? 'bg-white text-emerald-800 shadow-2xs font-semibold' : 'text-slate-500 hover:text-slate-900'
-                              }`}
-                            >
-                              Notes ({(internalNotes[p.id] || []).length})
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setActiveTab({ ...activeTab, [p.id]: 'files' })}
-                              className={`py-1.5 rounded-lg text-[11px] font-bold transition-all truncate cursor-pointer ${
-                                currentTab === 'files' ? 'bg-white text-emerald-800 shadow-2xs font-semibold' : 'text-slate-500 hover:text-slate-900'
-                              }`}
-                            >
-                              Files
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setActiveTab({ ...activeTab, [p.id]: 'timelog' })}
-                              className={`py-1.5 rounded-lg text-[11px] font-bold transition-all truncate cursor-pointer ${
-                                currentTab === 'timelog' ? 'bg-white text-emerald-800 shadow-2xs font-semibold' : 'text-slate-500 hover:text-slate-900'
-                              }`}
-                            >
-                              ⏱️ Logs
-                            </button>
-                          </div>
-
-                          {/* Tab 1: Task Checklist */}
-                          {currentTab === 'tasks' && (
-                            <div className="space-y-3 pt-1">
-                              <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
-                                {projTasks.length === 0 ? (
-                                  <p className="text-xs text-slate-400 italic py-2">No tasks added for this project yet.</p>
-                                ) : (
-                                  projTasks.map((t) => (
-                                    <div
-                                      key={t.id}
-                                      onClick={() => handleToggleTask(t.id, p.id, t.is_completed)}
-                                      className="flex items-center gap-2.5 p-2 bg-slate-50 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors border border-slate-200"
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={t.is_completed}
-                                        onChange={() => {}}
-                                        className="w-3.5 h-3.5 accent-emerald-600 rounded cursor-pointer"
-                                      />
-                                      <span className={`text-xs ${t.is_completed ? 'line-through text-slate-400 font-normal' : 'text-slate-800 font-medium'}`}>
-                                        {t.task_title || t.title}
+                        {/* Task Checklist with PoW guard */}
+                        {currentTab === 'tasks' && (
+                          <div className="space-y-2 pt-1">
+                            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                              {projTasks.length === 0 ? (
+                                <p className="text-xs text-slate-400 italic py-2 text-center">No tasks assigned.</p>
+                              ) : (
+                                projTasks.map((t) => (
+                                  <div
+                                    key={t.id}
+                                    className={`p-2.5 rounded-lg border flex items-center justify-between gap-2 text-xs ${
+                                      t.is_completed ? 'bg-slate-50 border-slate-200 text-slate-400' : 'bg-white border-slate-200'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 truncate">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleInitiateTaskCompletion(t, p.id)}
+                                        className="shrink-0 cursor-pointer"
+                                      >
+                                        {t.is_completed ? (
+                                          <CheckCircle2 size={16} className="text-emerald-600" />
+                                        ) : t.status === 'Under Review' ? (
+                                          <Clock size={16} className="text-amber-500" />
+                                        ) : (
+                                          <div className="w-3.5 h-3.5 rounded border border-slate-300" />
+                                        )}
+                                      </button>
+                                      <span className={`truncate text-xs ${t.is_completed ? 'line-through' : 'text-slate-800'}`}>
+                                        {t.title || t.task_title}
                                       </span>
                                     </div>
-                                  ))
-                                )}
-                              </div>
 
-                              <div className="flex gap-2">
-                                <input
-                                  type="text"
-                                  placeholder="Add checklist item..."
-                                  value={newTaskTitle[p.id] || ''}
-                                  onChange={(e) => setNewTaskTitle({ ...newTaskTitle, [p.id]: e.target.value })}
-                                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddTask(p.id); }}
-                                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleAddTask(p.id)}
-                                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-xs"
-                                >
-                                  + Add
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Tab 2: Studio Internal Notes */}
-                          {currentTab === 'notes' && (
-                            <div className="space-y-3 pt-1">
-                              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 max-h-44 overflow-y-auto space-y-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full">
-                                {(!internalNotes[p.id] || internalNotes[p.id].length === 0) ? (
-                                  <p className="text-xs text-slate-400 italic">No internal notes yet. Internal team notes are strictly hidden from clients.</p>
-                                ) : (
-                                  internalNotes[p.id].map((note: any) => (
-                                    <div key={note.id} className="bg-white border border-slate-200 p-2.5 rounded-lg space-y-1">
-                                      <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono">
-                                        <span className="font-bold text-emerald-700">
-                                          {note.author?.full_name || 'Team Member'} ({note.author?.role})
-                                        </span>
-                                        <span>{new Date(note.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                      </div>
-                                      <p className="text-xs text-slate-800">{note.note}</p>
+                                    <div className="shrink-0">
+                                      {t.is_completed ? (
+                                        <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">Done</span>
+                                      ) : t.status === 'Under Review' ? (
+                                        <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Review</span>
+                                      ) : (
+                                        <button
+                                          onClick={() => handleInitiateTaskCompletion(t, p.id)}
+                                          className="text-[10px] font-bold px-2 py-0.5 rounded bg-black text-white cursor-pointer"
+                                        >
+                                          Proof
+                                        </button>
+                                      )}
                                     </div>
-                                  ))
-                                )}
-                              </div>
-
-                              <div className="flex gap-2">
-                                <input
-                                  type="text"
-                                  placeholder="Internal team note..."
-                                  value={newNoteText[p.id] || ''}
-                                  onChange={(e) => setNewNoteText({ ...newNoteText, [p.id]: e.target.value })}
-                                  onKeyDown={(e) => { if (e.key === 'Enter') handleAddNote(p.id); }}
-                                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleAddNote(p.id)}
-                                  className="bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-all cursor-pointer"
-                                >
-                                  Post
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Tab 3: Project Files */}
-                          {currentTab === 'files' && (
-                            <div className="pt-1">
-                              {user && (
-                                <ProjectFileManager
-                                  projectId={p.id}
-                                  userId={user.id}
-                                  canUpload={true}
-                                />
+                                  </div>
+                                ))
                               )}
                             </div>
-                          )}
 
-                          {/* Tab 4: Time Tracking with Live Stopwatch & History */}
-                          {currentTab === 'timelog' && (
-                            <div className="pt-1 space-y-4">
-                              {/* Live Stopwatch Module */}
-                              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <div>
-                                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
-                                      Live Shift Stopwatch
-                                    </span>
-                                    <span className="text-[11px] text-slate-500">
-                                      Track real-time sprint session
-                                    </span>
+                            <div className="flex gap-1.5">
+                              <input
+                                type="text"
+                                placeholder="Add task..."
+                                value={newTaskTitle[p.id] || ''}
+                                onChange={(e) => setNewTaskTitle({ ...newTaskTitle, [p.id]: e.target.value })}
+                                onKeyDown={(e) => { if (e.key === 'Enter') handleAddTask(p.id); }}
+                                className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleAddTask(p.id)}
+                                className="bg-black text-white text-xs font-bold px-3 py-1.5 rounded-lg shrink-0 cursor-pointer"
+                              >
+                                Add
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Internal Notes */}
+                        {currentTab === 'notes' && (
+                          <div className="space-y-2 pt-1">
+                            <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                              {(!internalNotes[p.id] || internalNotes[p.id].length === 0) ? (
+                                <p className="text-xs text-slate-400 italic py-2 text-center">No internal notes.</p>
+                              ) : (
+                                internalNotes[p.id].map((n: any) => (
+                                  <div key={n.id} className="p-2 rounded bg-slate-50 border border-slate-200 text-xs">
+                                    <span className="text-[9px] font-bold text-emerald-800 block">{n.author?.full_name || 'Member'}</span>
+                                    <p className="text-slate-700 text-[11px] mt-0.5">{n.note}</p>
                                   </div>
-                                  <div className="font-mono font-bold text-base text-emerald-800 bg-white px-3 py-1 rounded-lg border border-slate-200 shadow-2xs">
-                                    {formatTimer(currentSecs)}
-                                  </div>
-                                </div>
+                                ))
+                              )}
+                            </div>
+                            <div className="flex gap-1.5">
+                              <input
+                                type="text"
+                                placeholder="Add note..."
+                                value={newNoteText[p.id] || ''}
+                                onChange={(e) => setNewNoteText({ ...newNoteText, [p.id]: e.target.value })}
+                                className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleAddNote(p.id)}
+                                className="bg-slate-800 text-white text-xs font-bold px-3 py-1.5 rounded-lg shrink-0 cursor-pointer"
+                              >
+                                Post
+                              </button>
+                            </div>
+                          </div>
+                        )}
 
-                                <input
-                                  type="text"
-                                  placeholder="What module or task are you currently coding?"
-                                  value={timerNotes[p.id] || ''}
-                                  onChange={(e) => setTimerNotes({ ...timerNotes, [p.id]: e.target.value })}
-                                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600"
-                                />
+                        {/* Files */}
+                        {currentTab === 'files' && user && (
+                          <ProjectFileManager projectId={p.id} userId={user.id} canUpload={true} />
+                        )}
 
-                                <div className="flex gap-2">
-                                  {!isTiming ? (
+                        {/* Stopwatch */}
+                        {currentTab === 'timelog' && (
+                          <div className="space-y-3 pt-1">
+                            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-slate-800">Shift Timer</span>
+                                <span className="font-mono font-bold text-sm bg-white px-2 py-0.5 rounded border border-slate-200">
+                                  {formatTimer(currentSecs)}
+                                </span>
+                              </div>
+                              <input
+                                type="text"
+                                placeholder="Working notes..."
+                                value={timerNotes[p.id] || ''}
+                                onChange={(e) => setTimerNotes({ ...timerNotes, [p.id]: e.target.value })}
+                                className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs"
+                              />
+                              <div className="flex gap-2">
+                                {!isTiming ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleTimer(p.id)}
+                                    className="w-full py-1.5 bg-black text-white text-xs font-bold rounded-lg cursor-pointer"
+                                  >
+                                    ▶ Start Shift
+                                  </button>
+                                ) : (
+                                  <>
                                     <button
                                       type="button"
                                       onClick={() => handleToggleTimer(p.id)}
-                                      className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-all shadow-xs cursor-pointer"
+                                      className="py-1.5 px-3 bg-amber-500 text-white text-xs font-bold rounded-lg cursor-pointer"
                                     >
-                                      ▶ Start Shift Timer
+                                      Pause
                                     </button>
-                                  ) : (
-                                    <>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleToggleTimer(p.id)}
-                                        className="py-2 px-4 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs rounded-lg transition-all cursor-pointer"
-                                      >
-                                        ⏸ Pause
-                                      </button>
-                                      <button
-                                        type="button"
-                                        disabled={timerSaving}
-                                        onClick={() => handleStopAndLogShift(p.id)}
-                                        className="flex-1 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg transition-all shadow-xs cursor-pointer animate-pulse disabled:opacity-50"
-                                      >
-                                        {timerSaving ? 'Saving...' : '⏹ Stop & Log Hours'}
-                                      </button>
-                                    </>
-                                  )}
-                                </div>
+                                    <button
+                                      type="button"
+                                      disabled={timerSaving}
+                                      onClick={() => handleStopAndLogShift(p.id)}
+                                      className="flex-1 py-1.5 bg-rose-600 text-white text-xs font-bold rounded-lg cursor-pointer"
+                                    >
+                                      {timerSaving ? 'Saving...' : 'Stop & Log'}
+                                    </button>
+                                  </>
+                                )}
                               </div>
-
-                              {/* Manual Logs & History Table */}
-                              {user && (
-                                <ProjectTimeTracker
-                                  projectId={p.id}
-                                  userId={user.id}
-                                />
-                              )}
                             </div>
-                          )}
-                        </div>
+                            {user && <ProjectTimeTracker projectId={p.id} userId={user.id} />}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
                 })}
               </div>
             )}
-          </div>
-        )}
-
-        {/* Update Modal Popup */}
-        {editingProj && (
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-            <div className="bg-white border border-slate-200 p-6 md:p-7 rounded-2xl w-full max-w-md shadow-xl">
-              <h3 className="text-base font-bold text-slate-900 mb-0.5">Update Sprint Progress</h3>
-              <p className="text-xs text-slate-500 mb-4">{editingProj.title}</p>
-
-              <form onSubmit={handleUpdateProject} className="space-y-4">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">Status</label>
-                  <select
-                    value={editingProj.status}
-                    onChange={(e) => setEditingProj({ ...editingProj, status: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
-                  >
-                    <option value="Not Started">Not Started</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Under Review">Under Review</option>
-                    <option value="Completed">Completed</option>
-                  </select>
-                </div>
-
-                <div>
-                  <div className="flex justify-between text-xs font-mono text-slate-600 mb-1">
-                    <label className="font-semibold text-[11px] uppercase">Progress Percentage</label>
-                    <span className="text-emerald-700 font-bold">{editingProj.progress}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={editingProj.progress || 0}
-                    onChange={(e) => setEditingProj({ ...editingProj, progress: Number(e.target.value) })}
-                    className="w-full accent-emerald-600 cursor-pointer"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">Current Working Task</label>
-                  <textarea
-                    rows={3}
-                    value={editingProj.pending_tasks || ''}
-                    onChange={(e) => setEditingProj({ ...editingProj, pending_tasks: e.target.value })}
-                    placeholder="E.g., Working on responsive navbar and API routes..."
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-600 focus:bg-white"
-                  />
-                </div>
-
-                <div className="flex gap-2.5 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setEditingProj(null)}
-                    className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-semibold text-slate-700 border border-slate-200 cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition-all shadow-xs cursor-pointer"
-                  >
-                    {saving ? 'Saving...' : 'Save Updates'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
+          </>
         )}
       </main>
+
+      {/* Proof Submission Modal */}
+      {submittingProofTask && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
+          <div className="bg-white border border-slate-200 rounded-xl p-5 max-w-sm w-full space-y-3 shadow-xl">
+            <h3 className="text-xs font-bold text-slate-900 uppercase flex items-center gap-1.5">
+              <ShieldCheck size={16} className="text-emerald-700" />
+              Submit Proof of Work
+            </h3>
+            <p className="text-xs text-slate-600 font-semibold">{submittingProofTask.title}</p>
+            <form onSubmit={handleSubmitProofOfWork} className="space-y-2.5">
+              <div>
+                <label className="text-[10px] font-bold text-slate-600 uppercase block mb-1">
+                  Deliverable / PR / Staging Link *
+                </label>
+                <input
+                  type="url"
+                  required
+                  placeholder="https://..."
+                  value={proofUrl}
+                  onChange={(e) => setProofUrl(e.target.value)}
+                  className="w-full text-xs border rounded-lg p-2 focus:outline-none focus:border-black"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-600 uppercase block mb-1">
+                  Summary Notes (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={proofNotes}
+                  onChange={(e) => setProofNotes(e.target.value)}
+                  className="w-full text-xs border rounded-lg p-2 focus:outline-none focus:border-black"
+                />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setSubmittingProofTask(null)}
+                  className="flex-1 py-1.5 bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={proofLoading}
+                  className="flex-1 py-1.5 bg-black text-white text-xs font-bold rounded-lg cursor-pointer"
+                >
+                  {proofLoading ? 'Submitting...' : 'Submit'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,29 +1,30 @@
 'use client'
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import ProjectFileManager from '@/components/ProjectFileManager';
 import ProjectTimeTracker from '@/components/ProjectTimeTracker';
 import ProjectKanbanBoard from '@/components/ProjectKanbanBoard';
 import ProjectBriefViewer from '@/components/ProjectBriefViewer';
 import DeliverableVersionManager from '@/components/DeliverableVersionManager';
-import FinancialProfitabilityAnalytics from '@/components/FinancialProfitabilityAnalytics';
 import NotificationBell from '@/components/NotificationBell';
 import CommandPalette from '@/components/CommandPalette';
 import AICopilot from '@/components/AICopilot';
 import ProjectConnectChat from '@/components/ProjectConnectChat';
-import AutomationCenter from '@/components/AutomationCenter';
-import PortfolioShowcase from '@/components/PortfolioShowcase';
-
-const ROLE_HIERARCHY = [
-  { key: 'admin', label: 'Admin', badge: 'bg-rose-50 text-rose-700 border-rose-200' },
-  { key: 'director', label: 'Director', badge: 'bg-purple-50 text-purple-700 border-purple-200' },
-  { key: 'senior_manager', label: 'Sr. Manager', badge: 'bg-sky-50 text-sky-700 border-sky-200' },
-  { key: 'manager', label: 'Manager', badge: 'bg-teal-50 text-teal-700 border-teal-200' },
-  { key: 'executive', label: 'Executive', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  { key: 'intern', label: 'Intern', badge: 'bg-slate-100 text-slate-600 border-slate-200' },
-];
+import SlackWorkspaceChat from '@/components/SlackWorkspaceChat';
+import AdminVerificationQueue from '@/components/AdminVerificationQueue';
+import { 
+  Users, 
+  FolderKanban, 
+  UsersRound, 
+  CreditCard, 
+  Sparkles, 
+  Plus, 
+  Edit3, 
+  Trash2, 
+  CheckCircle2, 
+  MessageSquare 
+} from 'lucide-react';
 
 const PROJECT_STATUSES = [
   'Planning',
@@ -36,25 +37,20 @@ const PROJECT_STATUSES = [
 ];
 
 export default function WorkspaceOverviewDashboard() {
+  const [activeTab, setActiveTab] = useState<'projects' | 'team' | 'crm' | 'finance' | 'slack'>('projects');
   const [projects, setProjects] = useState<any[]>([]);
   const [inquiries, setInquiries] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
-  const [feedbacks, setFeedbacks] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
-  const [activityLogs, setActivityLogs] = useState<any[]>([]);
-  const [announcements, setAnnouncements] = useState<any[]>([]);
   const [totalHoursWorked, setTotalHoursWorked] = useState<number>(0);
   const [projectHoursMap, setProjectHoursMap] = useState<Record<string, number>>({});
-  const [taskStats, setTaskStats] = useState<{ total: number; completed: number }>({ total: 0, completed: 0 });
   const [currentUserId, setCurrentUserId] = useState<string>('');
-  const [activeProjectTab, setActiveProjectTab] = useState<Record<string, 'files' | 'timelog' | 'invoices' | 'kanban' | 'brief' | 'versions' | 'chat'>>({});
+  const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
+  const [activeProjectTab, setActiveProjectTab] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
-  // Quick Command & AI Copilot State
   const [copilotOpen, setCopilotOpen] = useState(false);
-
-  // Modals
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
   const [newProject, setNewProject] = useState({
@@ -73,232 +69,101 @@ export default function WorkspaceOverviewDashboard() {
 
   const [showUserModal, setShowUserModal] = useState(false);
   const [creatingUser, setCreatingUser] = useState(false);
-  const [newUser, setNewUser] = useState({
-    fullName: '',
-    email: '',
-    password: '',
-    role: 'client',
-  });
+  const [newUser, setNewUser] = useState({ fullName: '', email: '', password: '', role: 'employee' });
+  const [editingEmployee, setEditingEmployee] = useState<any | null>(null);
 
-  // Invoice Modal
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [creatingInvoice, setCreatingInvoice] = useState(false);
-  const [newInvoice, setNewInvoice] = useState({
-    project_id: '',
-    client_id: '',
-    amount: '',
-    due_date: '',
-    description: '',
-  });
-
-  // Broadcast & CRM State
-  const [newAnnouncement, setNewAnnouncement] = useState('');
-  const [broadcasting, setBroadcasting] = useState(false);
+  const [newInvoice, setNewInvoice] = useState({ project_id: '', client_id: '', amount: '', due_date: '', description: '' });
   const [convertingId, setConvertingId] = useState<number | null>(null);
 
   const router = useRouter();
 
-  const loadData = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      router.push('/login');
-      return;
+  const loadData = useCallback(async () => {
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        await supabase.auth.signOut();
+        router.push('/login');
+        return;
+      }
+      setCurrentUserId(user.id);
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (profile?.role !== 'admin' && profile?.role !== 'director') {
+        router.push('/dashboard/client');
+        return;
+      }
+      setCurrentUserProfile(profile);
+
+      const { data: projData } = await supabase.from('projects').select('*').order('created_at', { ascending: false });
+      const { data: inqData } = await supabase.from('inquiries').select('*').order('created_at', { ascending: false });
+      const { data: empData } = await supabase.from('profiles').select('*').neq('role', 'client').order('full_name', { ascending: true });
+      const { data: clientData } = await supabase.from('profiles').select('*').eq('role', 'client').order('created_at', { ascending: true });
+      const { data: invData } = await supabase.from('project_invoices').select('*').order('created_at', { ascending: false });
+
+      // Safe fetch for project_time_logs to avoid 400 Bad Request
+      const { data: timeLogsData } = await supabase.from('project_time_logs').select('*');
+      if (timeLogsData) {
+        const overallHours = timeLogsData.reduce((acc: number, curr: any) => acc + Number(curr.hours_logged || curr.hours || 0), 0);
+        setTotalHoursWorked(overallHours);
+
+        const perProjectMap: Record<string, number> = {};
+        timeLogsData.forEach((t: any) => {
+          if (t.project_id) {
+            perProjectMap[t.project_id] = (perProjectMap[t.project_id] || 0) + Number(t.hours_logged || t.hours || 0);
+          }
+        });
+        setProjectHoursMap(perProjectMap);
+      }
+
+      if (projData) setProjects(projData);
+      if (inqData) setInquiries(inqData);
+      if (empData) setEmployees(empData);
+      if (clientData) setClients(clientData);
+      if (invData) setInvoices(invData);
+    } catch (err) {
+      console.error('Error loading admin workspace:', err);
+    } finally {
+      setLoading(false);
     }
-    setCurrentUserId(user.id);
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (profile?.role !== 'admin') {
-      router.push('/dashboard/client');
-      return;
-    }
-
-    const { data: projData } = await supabase.from('projects').select('*').order('created_at', { ascending: false });
-    const { data: inqData } = await supabase.from('inquiries').select('*').order('created_at', { ascending: false });
-
-    const { data: empData } = await supabase
-      .from('profiles')
-      .select('*')
-      .neq('role', 'client')
-      .order('created_at', { ascending: true });
-
-    const { data: clientData } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('role', 'client')
-      .order('created_at', { ascending: true });
-
-    const { data: fbData } = await supabase
-      .from('project_feedbacks')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    const { data: invData } = await supabase
-      .from('project_invoices')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    const { data: logsData } = await supabase
-      .from('studio_activity_logs')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(20);
-
-    const { data: annoData } = await supabase
-      .from('studio_announcements')
-      .select('*')
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
-
-    const { data: timeLogsData } = await supabase.from('project_time_logs').select('project_id, hours_logged, hours');
-    if (timeLogsData) {
-      const overallHours = timeLogsData.reduce((acc, curr) => acc + Number(curr.hours_logged || curr.hours || 0), 0);
-      setTotalHoursWorked(overallHours);
-
-      const perProjectMap: Record<string, number> = {};
-      timeLogsData.forEach((t) => {
-        perProjectMap[t.project_id] = (perProjectMap[t.project_id] || 0) + Number(t.hours_logged || t.hours || 0);
-      });
-      setProjectHoursMap(perProjectMap);
-    }
-
-    const { data: tasksData } = await supabase.from('project_tasks').select('is_completed');
-    if (tasksData) {
-      const completed = tasksData.filter((t) => t.is_completed).length;
-      setTaskStats({ total: tasksData.length, completed });
-    }
-
-    if (projData) setProjects(projData);
-    if (inqData) setInquiries(inqData);
-    if (empData) setEmployees(empData);
-    if (clientData) setClients(clientData);
-    if (fbData) setFeedbacks(fbData);
-    if (invData) setInvoices(invData);
-    if (logsData) setActivityLogs(logsData);
-    if (annoData) setAnnouncements(annoData);
-
-    setLoading(false);
-  };
+  }, [router]);
 
   useEffect(() => {
     loadData();
+  }, [loadData]);
 
-    const channel = supabase
-      .channel('admin_master_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_feedbacks' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_tasks' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_invoices' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'studio_activity_logs' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'studio_announcements' }, () => loadData())
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [router]);
-
-  // Invoice creation
-  const handleCreateInvoice = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newInvoice.project_id || !newInvoice.amount) return;
-    setCreatingInvoice(true);
-
-    const invoiceNum = `INV-${Date.now().toString().slice(-6)}`;
-    const { error } = await supabase.from('project_invoices').insert([
-      {
-        project_id: Number(newInvoice.project_id),
-        client_id: newInvoice.client_id || null,
-        invoice_number: invoiceNum,
-        amount: Number(newInvoice.amount),
-        currency: 'INR',
-        due_date: newInvoice.due_date || null,
-        description: newInvoice.description || 'Milestone Deliverable Fee',
-        status: 'Unpaid',
-      },
-    ]);
-
-    if (!error) {
-      await supabase.from('studio_activity_logs').insert([
-        {
-          project_id: Number(newInvoice.project_id),
-          actor_name: 'Admin',
-          action: `Generated Invoice #${invoiceNum} for ₹${Number(newInvoice.amount).toLocaleString()}`,
-        },
-      ]);
-      setShowInvoiceModal(false);
-      setNewInvoice({ project_id: '', client_id: '', amount: '', due_date: '', description: '' });
-      loadData();
-    } else {
-      alert('Error creating invoice: ' + error.message);
-    }
-    setCreatingInvoice(false);
+  const handleUpdateAvailability = async (empId: string, status: 'available' | 'busy' | 'on_leave') => {
+    await supabase.from('profiles').update({ availability_status: status }).eq('id', empId);
+    setEmployees((prev) => prev.map((e) => (e.id === empId ? { ...e, availability_status: status } : e)));
   };
 
-  const handleToggleInvoiceStatus = async (invId: number, currentStatus: string) => {
-    const nextStatus = currentStatus === 'Paid' ? 'Unpaid' : 'Paid';
-    await supabase.from('project_invoices').update({ status: nextStatus, paid_at: nextStatus === 'Paid' ? new Date() : null }).eq('id', invId);
-    loadData();
+  const handleSaveEmployeeDetails = async () => {
+    if (!editingEmployee) return;
+    await supabase
+      .from('profiles')
+      .update({
+        full_name: editingEmployee.full_name,
+        role: editingEmployee.role,
+        availability_status: editingEmployee.availability_status || 'available',
+      })
+      .eq('id', editingEmployee.id);
+
+    setEmployees((prev) => prev.map((e) => (e.id === editingEmployee.id ? editingEmployee : e)));
+    setEditingEmployee(null);
   };
 
-  // Convert CRM Lead
-  const handleConvertInquiry = async (inq: any) => {
-    if (!confirm(`Convert lead "${inq.full_name || inq.name}" into client and launch project?`)) return;
-    setConvertingId(inq.id);
-
-    try {
-      const res = await fetch('/api/admin/convert-inquiry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          inquiryId: inq.id,
-          name: inq.full_name || inq.name || 'Valued Client',
-          email: inq.email,
-          projectTitle: `${inq.subject || inq.service || 'Client Platform'} Project`,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Conversion failed');
-
-      alert(`Success! Created client workspace for ${inq.email}`);
-      loadData();
-    } catch (err: any) {
-      alert('Conversion error: ' + err.message);
-    } finally {
-      setConvertingId(null);
-    }
+  const handleDeleteEmployee = async (empId: string) => {
+    if (!confirm('Are you sure you want to remove this user?')) return;
+    await supabase.from('profiles').delete().eq('id', empId);
+    setEmployees((prev) => prev.filter((e) => e.id !== empId));
   };
 
-  // Broadcast Notice
-  const handlePostAnnouncement = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newAnnouncement.trim()) return;
-    setBroadcasting(true);
-
-    const { error } = await supabase.from('studio_announcements').insert([
-      { message: newAnnouncement, type: 'info', is_active: true },
-    ]);
-
-    if (!error) {
-      setNewAnnouncement('');
-      loadData();
-    } else {
-      alert('Error broadcasting: ' + error.message);
-    }
-    setBroadcasting(false);
-  };
-
-  const handleDismissAnnouncement = async (id: number) => {
-    await supabase.from('studio_announcements').update({ is_active: false }).eq('id', id);
-    loadData();
-  };
-
-  // Create User
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreatingUser(true);
@@ -311,7 +176,7 @@ export default function WorkspaceOverviewDashboard() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create user');
       setShowUserModal(false);
-      setNewUser({ fullName: '', email: '', password: '', role: 'client' });
+      setNewUser({ fullName: '', email: '', password: '', role: 'employee' });
       loadData();
     } catch (err: any) {
       alert(err.message);
@@ -320,7 +185,6 @@ export default function WorkspaceOverviewDashboard() {
     }
   };
 
-  // Create Project
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProject.title.trim()) return;
@@ -348,7 +212,6 @@ export default function WorkspaceOverviewDashboard() {
     }
   };
 
-  // Update Project
   const handleUpdateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProject) return;
@@ -379,676 +242,523 @@ export default function WorkspaceOverviewDashboard() {
 
   const handleDeleteProject = async (projectId: string | number) => {
     if (!confirm('Are you sure you want to delete this project?')) return;
-    const { error } = await supabase.from('projects').delete().eq('id', projectId);
-    if (!error) {
-      setEditingProject(null);
+    await supabase.from('projects').delete().eq('id', projectId);
+    setEditingProject(null);
+    loadData();
+  };
+
+  const handleConvertInquiry = async (inq: any) => {
+    if (!confirm(`Convert lead "${inq.full_name || inq.name}" into client?`)) return;
+    setConvertingId(inq.id);
+
+    try {
+      const res = await fetch('/api/admin/convert-inquiry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          inquiryId: inq.id,
+          name: inq.full_name || inq.name || 'Valued Client',
+          email: inq.email,
+          projectTitle: `${inq.subject || inq.service || 'Client Platform'} Project`,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Conversion failed');
+      alert(`Success! Created client workspace for ${inq.email}`);
       loadData();
+    } catch (err: any) {
+      alert('Conversion error: ' + err.message);
+    } finally {
+      setConvertingId(null);
     }
   };
 
-  // Helper for Project Health indicator
-  const getProjectHealth = (progress: number, status: string) => {
-    if (status === 'Blocked' || status === 'At Risk') return { health: '64%', label: 'At Risk', color: 'bg-rose-50 text-rose-700 border-rose-200' };
-    if (progress >= 85 || status === 'Completed') return { health: '98%', label: 'Optimal', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
-    return { health: '91%', label: 'On Track', color: 'bg-sky-50 text-sky-700 border-sky-200' };
+  const handleCreateInvoice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newInvoice.project_id || !newInvoice.amount) return;
+    setCreatingInvoice(true);
+
+    const invoiceNum = `INV-${Date.now().toString().slice(-6)}`;
+    const { error } = await supabase.from('project_invoices').insert([
+      {
+        project_id: Number(newInvoice.project_id),
+        client_id: newInvoice.client_id || null,
+        invoice_number: invoiceNum,
+        amount: Number(newInvoice.amount),
+        currency: 'INR',
+        due_date: newInvoice.due_date || null,
+        description: newInvoice.description || 'Milestone Deliverable Fee',
+        status: 'Unpaid',
+      },
+    ]);
+
+    if (!error) {
+      setShowInvoiceModal(false);
+      setNewInvoice({ project_id: '', client_id: '', amount: '', due_date: '', description: '' });
+      loadData();
+    } else {
+      alert('Error creating invoice: ' + error.message);
+    }
+    setCreatingInvoice(false);
   };
 
-  return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans antialiased selection:bg-[#bbf770] selection:text-black">
-      {/* Broadcast Notice Bar */}
-      {announcements.length > 0 && (
-        <div className="bg-emerald-50 border-b border-emerald-200 px-4 py-2 text-xs flex items-center justify-between text-emerald-900">
-          <div className="flex items-center gap-2.5 max-w-5xl truncate">
-            <span className="bg-emerald-600 text-white font-bold text-[10px] uppercase px-2 py-0.5 rounded-full tracking-wide">
-              Announcement
-            </span>
-            <span className="font-medium truncate">{announcements[0].message}</span>
-          </div>
-          <button
-            onClick={() => handleDismissAnnouncement(announcements[0].id)}
-            className="text-emerald-700 hover:text-emerald-950 font-bold ml-3 text-xs cursor-pointer"
-          >
-            Dismiss ✕
-          </button>
-        </div>
-      )}
+  const handleToggleInvoiceStatus = async (invId: number, currentStatus: string) => {
+    const nextStatus = currentStatus === 'Paid' ? 'Unpaid' : 'Paid';
+    await supabase.from('project_invoices').update({ status: nextStatus, paid_at: nextStatus === 'Paid' ? new Date() : null }).eq('id', invId);
+    loadData();
+  };
 
-      {/* Modern SaaS Header: Workspace Overview */}
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-9 h-9 rounded-xl overflow-hidden border border-slate-200/80 shadow-xs flex items-center justify-center shrink-0 select-none bg-white">
-              <img
-                src="/logo/site-logo.jpg"
-                alt="Askus Studio"
-                className="w-full h-full object-cover"
-              />
+  const totalRevenue = invoices.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+  const paidRevenue = invoices.filter((i) => i.status === 'Paid').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans antialiased selection:bg-[#C8FF91] selection:text-black">
+      {/* Sticky Mobile-Friendly Header */}
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-black text-white flex items-center justify-center font-black text-xs shrink-0">
+              A
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-sm font-black text-slate-950 tracking-tight">
-                  Workspace Overview
-                </h1>
-                <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-[#bbf770]/40 text-emerald-950 border border-[#bbf770]">
-                  Operating System
+            <div className="truncate">
+              <div className="flex items-center gap-1.5 truncate">
+                <h1 className="text-xs sm:text-sm font-bold text-slate-900 tracking-tight truncate">AskUs Studio</h1>
+                <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  Console
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 font-medium">Digital Business & Project Management Engine</p>
+              <p className="text-[10px] text-slate-400 hidden sm:block">Operations & Workspaces</p>
             </div>
-
-            {/* Quick module jumps */}
-            <nav className="hidden lg:flex items-center gap-4 ml-6 pl-6 border-l border-slate-200 text-xs font-medium text-slate-600">
-              <Link href="/legal-solutions" className="hover:text-black transition-colors">
-                ⚖️ Legal Solutions
-              </Link>
-              <a href="#automation-center" className="hover:text-black transition-colors">
-                ⚡ Automations
-              </a>
-              <a href="#portfolio-showcase" className="hover:text-black transition-colors">
-                🎨 Portfolio
-              </a>
-            </nav>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            {/* AI Copilot & Command Palette */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
-              type="button"
               onClick={() => setCopilotOpen(true)}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-900 bg-[#bbf770] hover:bg-[#a8f255] border border-[#bbf770] transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+              className="px-2.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold text-black bg-[#C8FF91] hover:bg-[#b8f57d] transition-colors flex items-center gap-1 cursor-pointer"
             >
-              <span>✨ Ask Copilot</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, metaKey: true }));
-              }}
-              className="hidden sm:flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-mono font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer"
-            >
-              <span>⌘K</span>
-            </button>
-
-            <button
-              onClick={() => setShowInvoiceModal(true)}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer"
-            >
-              + Invoice
-            </button>
-            <button
-              onClick={() => setShowUserModal(true)}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-all cursor-pointer"
-            >
-              + User
+              <Sparkles size={12} />
+              <span className="hidden sm:inline">AI Copilot</span>
             </button>
             <button
               onClick={() => setShowProjectModal(true)}
-              className="px-3.5 py-1.5 rounded-lg text-xs font-bold text-white bg-slate-950 hover:bg-black transition-all shadow-xs cursor-pointer active:scale-95"
+              className="px-2.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold text-white bg-black hover:bg-slate-800 transition-colors flex items-center gap-1 cursor-pointer"
             >
-              + Project
+              <Plus size={12} />
+              <span>Project</span>
+            </button>
+            <button
+              onClick={() => setShowUserModal(true)}
+              className="px-2 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 cursor-pointer"
+            >
+              + User
             </button>
             {currentUserId && <NotificationBell userId={currentUserId} />}
             <button
               onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-all cursor-pointer"
+              className="px-2 py-1.5 rounded-lg text-[11px] sm:text-xs font-medium text-rose-600 hover:bg-rose-50 cursor-pointer"
             >
               Logout
             </button>
           </div>
         </div>
+
+        {/* 5 Tabs with smooth horizontal touch-scrolling */}
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 flex gap-2 border-t border-slate-100 overflow-x-auto [&::-webkit-scrollbar]:hidden">
+          {[
+            { id: 'projects', label: 'Projects', icon: FolderKanban, count: projects.length },
+            { id: 'team', label: 'Team', icon: Users, count: employees.length },
+            { id: 'crm', label: 'Pipeline', icon: UsersRound, count: inquiries.length },
+            { id: 'finance', label: 'Ledger', icon: CreditCard, count: `₹${(paidRevenue / 1000).toFixed(0)}k` },
+            { id: 'slack', label: 'Slack', icon: MessageSquare, count: 'Live' },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex items-center gap-1.5 py-2.5 px-3 border-b-2 text-xs font-bold whitespace-nowrap cursor-pointer transition-colors ${
+                  isActive
+                    ? 'border-black text-black'
+                    : 'border-transparent text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                <Icon size={13} className={isActive ? 'text-black' : 'text-slate-400'} />
+                <span>{tab.label}</span>
+                <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded-full ${
+                  isActive ? 'bg-black text-white' : 'bg-slate-100 text-slate-500'
+                }`}>
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* KPI Strip: Modern Business Metrics */}
-        <section className="grid grid-cols-2 md:grid-cols-6 gap-3.5">
-          {[
-            { label: 'Active Projects', val: projects.length, highlight: 'text-slate-900', note: 'Linear workflows' },
-            { label: 'Invoiced Revenue', val: `₹${invoices.reduce((a, c) => a + Number(c.amount || 0), 0).toLocaleString()}`, highlight: 'text-emerald-700', note: 'Recognized' },
-            { label: 'Team Capacity', val: `${employees.length} Active`, highlight: 'text-slate-900', note: 'Workload distribution' },
-            { label: 'Time Invested', val: `${totalHoursWorked.toFixed(1)}h`, highlight: 'text-slate-900', note: 'Logged sprints' },
-            { label: 'Tasks Done', val: `${taskStats.completed}/${taskStats.total}`, highlight: 'text-slate-900', note: 'Sprint velocity' },
-            { label: 'Client Pipeline', val: inquiries.length, highlight: 'text-sky-700', note: 'Inquiries & leads' },
-          ].map((item, idx) => (
-            <div
-              key={idx}
-              className="bg-white border border-slate-200/90 rounded-2xl p-4 flex flex-col justify-between shadow-[0_2px_8px_rgba(0,0,0,0.02)] hover:border-slate-300 transition-all"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{item.label}</span>
-              </div>
-              <span className={`text-2xl font-black mt-2 tracking-tight ${item.highlight}`}>
-                {item.val}
-              </span>
-              <span className="text-[10px] text-slate-400 mt-1 font-medium">{item.note}</span>
-            </div>
-          ))}
-        </section>
-
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
         {loading ? (
-          <div className="py-24 text-center text-xs text-slate-400 font-mono">Synchronizing workspace ecosystem...</div>
+          <div className="py-20 text-center text-xs text-slate-400 font-mono">Loading operations...</div>
         ) : (
           <>
-            {/* Split Screen Master Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              
-              {/* Left Column: Projects, Kanban, Brief, Chat, Versions & Finance (7 Cols) */}
-              <section className="lg:col-span-7 space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between pb-1">
-                    <div>
-                      <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Active Projects & Workspaces</h2>
-                      <p className="text-xs text-slate-500">Live milestones, deliverables, task boards & collaborative communication</p>
-                    </div>
-                    <span className="text-xs font-mono font-semibold text-slate-700 bg-white px-3 py-1 rounded-full border border-slate-200 shadow-2xs">
-                      {projects.length} In Progress
-                    </span>
-                  </div>
+            {/* TAB 1: PROJECTS */}
+            {activeTab === 'projects' && (
+              <div className="space-y-4 sm:space-y-6">
+                <AdminVerificationQueue />
 
-                  {projects.length === 0 ? (
-                    <div className="bg-white border border-dashed border-slate-200 rounded-2xl p-12 text-center text-xs text-slate-400">
-                      No active projects in this workspace. Launch one using the "+ Project" button.
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {projects.map((proj) => {
-                        const assignedClient = clients.find((c) => c.id === proj.client_id);
-                        const assignedEmp = employees.find((e) => e.id === proj.assigned_to);
-                        const currentTab = activeProjectTab[proj.id] || 'files';
-                        const loggedHours = projectHoursMap[proj.id] || 0;
-                        const projInvoices = invoices.filter((i) => String(i.project_id) === String(proj.id));
-                        const health = getProjectHealth(proj.progress || 0, proj.status || 'In Progress');
-
-                        return (
-                          <div key={proj.id} className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-4 shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:border-slate-300 transition-all">
-                            {/* Project Header */}
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <h3 className="font-bold text-sm text-slate-950 truncate">{proj.title}</h3>
-                                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200">
-                                    PRJ-{proj.id}
-                                  </span>
-                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${health.color}`}>
-                                    Health: {health.health} • {health.label}
-                                  </span>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-2">
-                                  <span>Client: <strong className="text-slate-800 font-semibold">{assignedClient?.full_name || 'Unassigned'}</strong></span>
-                                  <span className="text-slate-300">•</span>
-                                  <span>Task Owner: <strong className="text-slate-800 font-semibold">{assignedEmp?.full_name || 'Unassigned'}</strong></span>
-                                </div>
-                              </div>
-
-                              <div className="flex flex-col items-end gap-1.5 shrink-0">
-                                <div className="flex items-center gap-2">
-                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
-                                    proj.client_signoff === 'Approved'
-                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                      : proj.client_signoff === 'Changes Requested'
-                                      ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                      : 'bg-slate-100 text-slate-600 border-slate-200'
-                                  }`}>
-                                    Sign-off: {proj.client_signoff || 'Pending'}
-                                  </span>
-                                  <button
-                                    onClick={() => setEditingProject(proj)}
-                                    className="text-xs px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors font-semibold cursor-pointer"
-                                  >
-                                    Edit
-                                  </button>
-                                </div>
-
-                                <div className="text-[10px] font-mono text-slate-500">
-                                  Revisions: <span className="text-emerald-700 font-bold">{proj.used_revisions || 0}</span> / {proj.max_revisions || 3}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Progress Line */}
-                            <div className="space-y-1.5">
-                              <div className="flex justify-between text-xs font-mono">
-                                <span className="text-slate-500 font-sans">Status: <strong className="text-slate-800">{proj.status || 'In Progress'}</strong></span>
-                                <span className="text-slate-900 font-bold">{proj.progress}% Completed</span>
-                              </div>
-                              <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                                <div className="h-full bg-slate-950 transition-all duration-300" style={{ width: `${proj.progress}%` }} />
-                              </div>
-                            </div>
-
-                            {/* Milestone Box & Preview */}
-                            <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs">
-                              <div className="truncate text-slate-700">
-                                <span className="text-slate-400 font-semibold mr-1.5 uppercase text-[10px]">Active Milestone:</span>
-                                {proj.pending_tasks || 'Sprint goals on schedule'}
-                              </div>
-                              {proj.preview_url && (
-                                <a href={proj.preview_url} target="_blank" rel="noreferrer" className="text-[11px] font-bold text-slate-900 hover:underline shrink-0">
-                                  ↗ Open Deliverable
-                                </a>
-                              )}
-                            </div>
-
-                            {/* SaaS Tabs Navigation */}
-                            <div className="border-t border-slate-100 pt-3.5 space-y-3">
-                              <div className="flex gap-1.5 flex-wrap">
-                                {[
-                                  { key: 'files', label: '📁 Files' },
-                                  { key: 'kanban', label: '📌 Tasks / Kanban' },
-                                  { key: 'brief', label: '📋 Brief' },
-                                  { key: 'versions', label: '🎨 Versions' },
-                                  { key: 'timelog', label: `⏱️ Sprints (${loggedHours.toFixed(1)}h)` },
-                                  { key: 'invoices', label: `💳 Invoices (${projInvoices.length})` },
-                                  { key: 'chat', label: '💬 Connect' },
-                                ].map((tabItem) => (
-                                  <button
-                                    key={tabItem.key}
-                                    onClick={() => setActiveProjectTab({ ...activeProjectTab, [proj.id]: tabItem.key as any })}
-                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                                      currentTab === tabItem.key
-                                        ? 'bg-slate-900 text-white shadow-2xs'
-                                        : 'text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200'
-                                    }`}
-                                  >
-                                    {tabItem.label}
-                                  </button>
-                                ))}
-                              </div>
-
-                              {/* Tab Views */}
-                              {currentTab === 'files' && currentUserId && (
-                                <ProjectFileManager projectId={proj.id} userId={currentUserId} canUpload={true} />
-                              )}
-                              {currentTab === 'kanban' && <ProjectKanbanBoard projectId={proj.id} />}
-                              {currentTab === 'brief' && <ProjectBriefViewer projectId={proj.id} />}
-                              {currentTab === 'versions' && currentUserId && (
-                                <DeliverableVersionManager projectId={proj.id} currentUserId={currentUserId} />
-                              )}
-                              {currentTab === 'timelog' && currentUserId && (
-                                <ProjectTimeTracker projectId={proj.id} userId={currentUserId} />
-                              )}
-                              {currentTab === 'chat' && currentUserId && (
-                                <ProjectConnectChat
-                                  projectId={proj.id}
-                                  projectTitle={proj.title}
-                                  currentUserId={currentUserId}
-                                  currentUserRole="admin"
-                                />
-                              )}
-                              {currentTab === 'invoices' && (
-                                <div className="space-y-2 pt-1">
-                                  {projInvoices.length === 0 ? (
-                                    <p className="text-xs text-slate-400 italic py-2">No invoices generated for this project.</p>
-                                  ) : (
-                                    projInvoices.map((inv) => (
-                                      <div key={inv.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
-                                        <div>
-                                          <div className="flex items-center gap-2">
-                                            <span className="font-bold text-slate-900">{inv.invoice_number}</span>
-                                            <span className="text-emerald-700 font-bold">₹{Number(inv.amount).toLocaleString()}</span>
-                                          </div>
-                                          <p className="text-[10px] text-slate-500 mt-0.5">{inv.description || 'Milestone fee'}</p>
-                                        </div>
-                                        <button
-                                          onClick={() => handleToggleInvoiceStatus(inv.id, inv.status)}
-                                          className={`px-3 py-1 rounded-md text-[10px] font-bold border transition-colors cursor-pointer ${
-                                            inv.status === 'Paid'
-                                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                                              : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-emerald-100'
-                                          }`}
-                                        >
-                                          {inv.status === 'Paid' ? '✓ Paid' : 'Mark Paid'}
-                                        </button>
-                                      </div>
-                                    ))
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* Financial Profitability Analytics Component */}
-                <FinancialProfitabilityAnalytics
-                  projects={projects}
-                  invoices={invoices}
-                  projectHoursMap={projectHoursMap}
-                />
-              </section>
-
-              {/* Right Column: CRM Leads, Feedbacks & Activity Center (5 Cols) */}
-              <section className="lg:col-span-5 space-y-5">
-                
-                {/* CRM Lead Pipeline */}
-                <div className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-3 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Client Pipeline</h2>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 font-semibold">
-                        {inquiries.length} leads
-                      </span>
-                    </div>
-                  </div>
-
-                  {inquiries.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic py-4 text-center">No leads in pipeline.</p>
-                  ) : (
-                    <div className="space-y-2.5 max-h-[290px] overflow-y-auto pr-1.5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-300">
-                      {inquiries.map((inq) => {
-                        const isConverted = inq.status === 'Converted';
-                        return (
-                          <div key={inq.id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-2">
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <span className="font-bold text-slate-900">{inq.full_name || inq.name || 'Prospect'}</span>
-                                <p className="text-[11px] text-slate-500">{inq.email}</p>
-                              </div>
-                              <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-semibold ${
-                                isConverted ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-sky-50 text-sky-700 border border-sky-200'
-                              }`}>
-                                {inq.status || 'New'}
-                              </span>
-                            </div>
-
-                            {inq.message && (
-                              <p className="text-[11px] text-slate-700 italic bg-white p-2 rounded-lg border border-slate-200">
-                                "{inq.message}"
-                              </p>
-                            )}
-
-                            {!isConverted && (
-                              <button
-                                onClick={() => handleConvertInquiry(inq)}
-                                disabled={convertingId === inq.id}
-                                className="w-full py-2 bg-slate-900 hover:bg-black text-white rounded-lg text-[11px] font-bold transition-all shadow-xs cursor-pointer"
-                              >
-                                {convertingId === inq.id ? 'Launching...' : '⚡ Convert to Client & Create Project'}
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* Client Feedback Feed */}
-                <div className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-3 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Client Feedbacks</h2>
-                    <span className="text-[10px] font-mono font-semibold text-emerald-700">{feedbacks.length} notes</span>
-                  </div>
-
-                  {feedbacks.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic py-4 text-center">No feedback recorded yet.</p>
-                  ) : (
-                    <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-1">
-                      {feedbacks.map((fb) => (
-                        <div key={fb.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
-                          <p className="text-slate-800">"{fb.message}"</p>
-                          <span className="text-[10px] text-slate-500 block">
-                            {new Date(fb.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Project #{fb.project_id}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Activity Center (Studio Audit Trail) */}
-                <div className="bg-white border border-slate-200/90 rounded-2xl p-5 space-y-3 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Activity Center</h2>
-                    <span className="text-[10px] font-mono text-slate-400">Real-time Feed</span>
-                  </div>
-
-                  {activityLogs.length === 0 ? (
-                    <p className="text-xs text-slate-400 italic py-4 text-center">No recent activities logged.</p>
-                  ) : (
-                    <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1 font-mono text-[11px]">
-                      {activityLogs.map((log) => (
-                        <div key={log.id} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 flex items-start gap-2">
-                          <span className="text-emerald-600 font-bold shrink-0">●</span>
-                          <div className="min-w-0">
-                            <p className="truncate">{log.action}</p>
-                            <span className="text-[9px] text-slate-400">{new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-              </section>
-
-            </div>
-
-            {/* Middle Section: People / Team Capacity Heatmap & Broadcast Publisher */}
-            <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 border-t border-slate-200 pt-8">
-              
-              {/* People & Team Capacity (8 Cols) */}
-              <div className="lg:col-span-8 bg-white border border-slate-200/90 rounded-2xl p-5 space-y-4 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center justify-between pt-1">
                   <div>
-                    <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">People & Team Capacity</h2>
-                    <p className="text-xs text-slate-500">Real-time task load distribution across departments</p>
+                    <h2 className="text-xs sm:text-sm font-bold text-slate-900">Workspaces & Sprints</h2>
+                    <p className="text-[11px] text-slate-500">Live kanban, deliverables & approvals</p>
                   </div>
-                  <span className="text-xs font-mono text-slate-500 font-semibold">{employees.length} Team Members</span>
+                  <button
+                    onClick={() => setShowProjectModal(true)}
+                    className="px-2.5 py-1.5 bg-black text-white rounded-lg text-xs font-bold cursor-pointer"
+                  >
+                    + New
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {projects.length === 0 ? (
+                  <div className="bg-white border border-dashed border-slate-200 rounded-xl p-8 text-center text-xs text-slate-400">
+                    No active projects.
+                  </div>
+                ) : (
+                  <div className="space-y-3 sm:space-y-4">
+                    {projects.map((proj) => {
+                      const assignedClient = clients.find((c) => c.id === proj.client_id);
+                      const assignedEmp = employees.find((e) => e.id === proj.assigned_to);
+                      const currentTab = activeProjectTab[proj.id] || 'kanban';
+
+                      return (
+                        <div key={proj.id} className="bg-white border border-slate-200 rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3 sm:space-y-4">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <h3 className="font-bold text-sm sm:text-base text-slate-900 truncate">{proj.title}</h3>
+                                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                                  #{proj.id}
+                                </span>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                  {proj.status}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-slate-500 mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
+                                <span>Client: <strong>{assignedClient?.full_name?.split(' ')[0] || 'Unassigned'}</strong></span>
+                                <span>•</span>
+                                <span>Owner: <strong>{assignedEmp?.full_name?.split(' ')[0] || 'Unassigned'}</strong></span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => setEditingProject(proj)}
+                                className="px-2 py-1 rounded-lg text-[11px] font-semibold bg-slate-100 text-slate-700 cursor-pointer"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteProject(proj.id)}
+                                className="px-2 py-1 rounded-lg text-[11px] font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-[11px] font-mono text-slate-500">
+                              <span>Sprint Progress</span>
+                              <span className="font-bold text-slate-800">{proj.progress}%</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-black transition-all" style={{ width: `${proj.progress}%` }} />
+                            </div>
+                          </div>
+
+                          <div className="border-t border-slate-100 pt-3 space-y-3">
+                            <div className="flex gap-1 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden">
+                              {[
+                                { key: 'kanban', label: '📌 Tasks' },
+                                { key: 'files', label: '📁 Files' },
+                                { key: 'brief', label: '📋 Brief' },
+                                { key: 'versions', label: '🎨 Versions' },
+                                { key: 'timelog', label: '⏱️️ Logs' },
+                                { key: 'chat', label: '💬 Chat' },
+                              ].map((t) => (
+                                <button
+                                  key={t.key}
+                                  onClick={() => setActiveProjectTab({ ...activeProjectTab, [proj.id]: t.key })}
+                                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap cursor-pointer transition-colors ${
+                                    currentTab === t.key
+                                      ? 'bg-black text-white'
+                                      : 'bg-slate-100 text-slate-600'
+                                  }`}
+                                >
+                                  {t.label}
+                                </button>
+                              ))}
+                            </div>
+
+                            {currentTab === 'kanban' && <ProjectKanbanBoard projectId={proj.id} teamRoster={employees} />}
+                            {currentTab === 'files' && <ProjectFileManager projectId={proj.id} userId={currentUserId} canUpload={true} />}
+                            {currentTab === 'brief' && <ProjectBriefViewer projectId={proj.id} />}
+                            {currentTab === 'versions' && <DeliverableVersionManager projectId={proj.id} currentUserId={currentUserId} />}
+                            {currentTab === 'timelog' && <ProjectTimeTracker projectId={proj.id} userId={currentUserId} />}
+                            {currentTab === 'chat' && (
+                              <ProjectConnectChat
+                                projectId={proj.id}
+                                projectTitle={proj.title}
+                                currentUserId={currentUserId}
+                                currentUserRole="admin"
+                              />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 2: TEAM */}
+            {activeTab === 'team' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xs sm:text-sm font-bold text-slate-900">Team Roster</h2>
+                    <p className="text-[11px] text-slate-500">Live member status & role allocation</p>
+                  </div>
+                  <button
+                    onClick={() => setShowUserModal(true)}
+                    className="px-2.5 py-1.5 bg-black text-white rounded-lg text-xs font-bold cursor-pointer"
+                  >
+                    + Provision
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                   {employees.map((emp) => {
+                    const status = emp.availability_status || 'available';
                     const assignedProjs = projects.filter((p) => p.assigned_to === emp.id);
-                    const isBusy = assignedProjs.length > 0;
 
                     return (
-                      <div key={emp.id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-xs text-slate-900 truncate">{emp.full_name || 'Member'}</span>
-                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-white text-slate-600 border border-slate-200 uppercase">{emp.role}</span>
+                      <div key={emp.id} className="bg-white border border-slate-200 rounded-xl p-3.5 flex flex-col justify-between gap-2.5 shadow-2xs">
+                        <div>
+                          <div className="flex items-start justify-between">
+                            <div className="min-w-0">
+                              <h4 className="text-xs font-bold text-slate-900 truncate">{emp.full_name || 'Member'}</h4>
+                              <p className="text-[10px] text-slate-400 truncate">{emp.email}</p>
+                            </div>
+                            <span className="text-[8px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 shrink-0">
+                              {emp.role}
+                            </span>
                           </div>
-                          <p className="text-[10px] text-slate-500 truncate mt-0.5">{emp.email}</p>
+
+                          <div className="mt-1.5 text-[11px] text-slate-500">
+                            Active Sprints: <strong>{assignedProjs.length}</strong>
+                          </div>
                         </div>
-                        <div className="text-right shrink-0">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            isBusy ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                          }`}>
-                            {isBusy ? `${assignedProjs.length} Active Workflows` : 'Available'}
-                          </span>
+
+                        <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-1.5">
+                          <select
+                            value={status}
+                            onChange={(e) => handleUpdateAvailability(emp.id, e.target.value as any)}
+                            className="text-[10px] font-bold rounded-lg px-2 py-1 border bg-white outline-none cursor-pointer"
+                          >
+                            <option value="available">🟢 Available</option>
+                            <option value="busy">🟡 Busy</option>
+                            <option value="on_leave">🔴 On Leave</option>
+                          </select>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setEditingEmployee(emp)}
+                              className="p-1 hover:bg-slate-100 rounded text-slate-600"
+                            >
+                              <Edit3 size={13} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteEmployee(emp.id)}
+                              className="p-1 hover:bg-rose-50 rounded text-rose-500"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
               </div>
+            )}
 
-              {/* Broadcast Notice Publisher (4 Cols) */}
-              <div className="lg:col-span-4 bg-white border border-slate-200/90 rounded-2xl p-5 space-y-4 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
-                <div className="border-b border-slate-100 pb-3">
-                  <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Broadcast Announcement</h2>
-                  <p className="text-xs text-slate-500">Publish immediate notice to all connected portals</p>
+            {/* TAB 3: CRM */}
+            {activeTab === 'crm' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xs sm:text-sm font-bold text-slate-900">Incoming Pipeline</h2>
+                  <span className="text-xs font-mono font-bold bg-white px-2.5 py-0.5 rounded-full border border-slate-200">
+                    {inquiries.length} Leads
+                  </span>
                 </div>
 
-                <form onSubmit={handlePostAnnouncement} className="space-y-3">
-                  <textarea
-                    rows={3}
-                    required
-                    placeholder="e.g. System maintenance sprint planned for Friday 10 PM."
-                    value={newAnnouncement}
-                    onChange={(e) => setNewAnnouncement(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white transition-all"
-                  />
-                  <button
-                    type="submit"
-                    disabled={broadcasting}
-                    className="w-full py-2.5 bg-slate-900 hover:bg-black text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer active:scale-95"
-                  >
-                    {broadcasting ? 'Publishing...' : '📢 Broadcast Notice'}
-                  </button>
-                </form>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {inquiries.map((inq) => {
+                    const isConverted = inq.status === 'Converted';
+                    return (
+                      <div key={inq.id} className="bg-white border border-slate-200 rounded-xl p-3.5 space-y-2.5 shadow-2xs">
+                        <div className="flex items-start justify-between">
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-bold text-slate-900 truncate">{inq.full_name || inq.name || 'Lead'}</h4>
+                            <p className="text-[10px] text-slate-400 truncate">{inq.email} • {inq.phone || 'No phone'}</p>
+                          </div>
+                          <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded shrink-0 ${
+                            isConverted ? 'bg-emerald-50 text-emerald-700' : 'bg-sky-50 text-sky-700'
+                          }`}>
+                            {inq.status || 'New'}
+                          </span>
+                        </div>
+                        {inq.message && <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded-lg break-words">"{inq.message}"</p>}
+                        {!isConverted ? (
+                          <button
+                            onClick={() => handleConvertInquiry(inq)}
+                            disabled={convertingId === inq.id}
+                            className="w-full py-1.5 bg-black text-white rounded-lg text-xs font-bold cursor-pointer"
+                          >
+                            {convertingId === inq.id ? 'Converting...' : '⚡ Convert to Workspace'}
+                          </button>
+                        ) : (
+                          <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
+                            <CheckCircle2 size={12} /> Active Workspace
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
+            )}
 
-            </section>
+            {/* TAB 4: FINANCE */}
+            {activeTab === 'finance' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xs sm:text-sm font-bold text-slate-900">Financial Ledger</h2>
+                  <button
+                    onClick={() => setShowInvoiceModal(true)}
+                    className="px-2.5 py-1.5 bg-black text-white rounded-lg text-xs font-bold cursor-pointer"
+                  >
+                    + Invoice
+                  </button>
+                </div>
 
-            {/* Bottom Section: Automation Center & Portfolio Case Studies */}
-            <section id="automation-center" className="space-y-8 border-t border-slate-200 pt-8">
-              <AutomationCenter />
-            </section>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="bg-white border border-slate-200 rounded-xl p-3 text-center sm:text-left">
+                    <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase block">Total Billed</span>
+                    <span className="text-sm sm:text-lg font-black text-slate-900 mt-0.5 block">₹{totalRevenue.toLocaleString()}</span>
+                  </div>
+                  <div className="bg-white border border-slate-200 rounded-xl p-3 text-center sm:text-left">
+                    <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase block">Collected</span>
+                    <span className="text-sm sm:text-lg font-black text-emerald-700 mt-0.5 block">₹{paidRevenue.toLocaleString()}</span>
+                  </div>
+                  <div className="bg-white border border-slate-200 rounded-xl p-3 text-center sm:text-left">
+                    <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase block">Pending</span>
+                    <span className="text-sm sm:text-lg font-black text-amber-700 mt-0.5 block">₹{(totalRevenue - paidRevenue).toLocaleString()}</span>
+                  </div>
+                </div>
 
-            <section id="portfolio-showcase" className="space-y-8 border-t border-slate-200 pt-8">
-              <PortfolioShowcase projects={projects.filter((p) => p.status === 'Completed' || p.progress === 100)} />
-            </section>
+                <div className="bg-white border border-slate-200 rounded-xl p-3.5 space-y-2">
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Invoices</h3>
+                  {invoices.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic text-center py-3">No invoices yet.</p>
+                  ) : (
+                    invoices.map((inv) => (
+                      <div key={inv.id} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between text-xs gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-bold text-slate-900">{inv.invoice_number}</span>
+                            <span className="font-bold text-emerald-700">₹{Number(inv.amount).toLocaleString()}</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 truncate">{inv.description || 'Milestone'}</p>
+                        </div>
+                        <button
+                          onClick={() => handleToggleInvoiceStatus(inv.id, inv.status)}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold border shrink-0 cursor-pointer ${
+                            inv.status === 'Paid' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-50 text-amber-800 border-amber-300'
+                          }`}
+                        >
+                          {inv.status === 'Paid' ? '✓ Paid' : 'Mark Paid'}
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 5: SLACK LIVE CHAT */}
+            {activeTab === 'slack' && currentUserId && (
+              <div className="space-y-3">
+                <SlackWorkspaceChat
+                  currentUser={{
+                    id: currentUserId,
+                    full_name: currentUserProfile?.full_name || 'Admin',
+                    role: currentUserProfile?.role || 'admin',
+                  }}
+                />
+              </div>
+            )}
           </>
         )}
       </main>
 
-      {/* Modal: Create Invoice */}
-      {showInvoiceModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-slate-900">Generate Client Invoice</h3>
-              <button onClick={() => setShowInvoiceModal(false)} className="text-slate-400 hover:text-slate-600 text-xs cursor-pointer">✕</button>
-            </div>
-
-            <form onSubmit={handleCreateInvoice} className="space-y-3.5">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Select Project *</label>
-                <select
-                  required
-                  value={newInvoice.project_id}
-                  onChange={(e) => {
-                    const selProj = projects.find((p) => String(p.id) === e.target.value);
-                    setNewInvoice({ ...newInvoice, project_id: e.target.value, client_id: selProj?.client_id || '' });
-                  }}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                >
-                  <option value="">Select Project</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>{p.title} (#{p.id})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Fee Amount (INR) *</label>
-                <input
-                  type="number"
-                  required
-                  placeholder="e.g. 25000"
-                  value={newInvoice.amount}
-                  onChange={(e) => setNewInvoice({ ...newInvoice, amount: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Due Date</label>
-                <input
-                  type="date"
-                  value={newInvoice.due_date}
-                  onChange={(e) => setNewInvoice({ ...newInvoice, due_date: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Description / Milestone</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Phase 1 Sprint Deliverable"
-                  value={newInvoice.description}
-                  onChange={(e) => setNewInvoice({ ...newInvoice, description: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                />
-              </div>
-
-              <div className="flex gap-2.5 pt-2">
-                <button type="button" onClick={() => setShowInvoiceModal(false)} className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 cursor-pointer">
-                  Cancel
-                </button>
-                <button type="submit" disabled={creatingInvoice} className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white bg-slate-950 hover:bg-black shadow-xs cursor-pointer">
-                  {creatingInvoice ? 'Issuing...' : 'Issue Invoice'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Create User */}
+      {/* Responsive Modals */}
       {showUserModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-slate-900">Provision User Account</h3>
-              <button onClick={() => setShowUserModal(false)} className="text-slate-400 hover:text-slate-600 text-xs cursor-pointer">✕</button>
-            </div>
-
-            <form onSubmit={handleCreateUser} className="space-y-3.5">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Full Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Rahul Sharma"
-                  value={newUser.fullName}
-                  onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Email Address</label>
-                <input
-                  type="email"
-                  required
-                  placeholder="name@example.com"
-                  value={newUser.email}
-                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Password</label>
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  placeholder="••••••••"
-                  value={newUser.password}
-                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Role & Permissions</label>
-                <select
-                  value={newUser.role}
-                  onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                >
-                  <option value="client">Client (External Portal)</option>
-                  <option value="director">Director</option>
-                  <option value="senior_manager">Senior Manager</option>
-                  <option value="manager">Manager</option>
-                  <option value="executive">Executive</option>
-                  <option value="intern">Intern</option>
-                </select>
-              </div>
-
-              <div className="flex gap-2.5 pt-2">
-                <button type="button" onClick={() => setShowUserModal(false)} className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 cursor-pointer">
-                  Cancel
-                </button>
-                <button type="submit" disabled={creatingUser} className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white bg-slate-950 hover:bg-black shadow-xs cursor-pointer">
-                  {creatingUser ? 'Provisioning...' : 'Provision User'}
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
+          <div className="bg-white border border-slate-200 rounded-xl p-5 w-full max-w-sm shadow-xl space-y-3">
+            <h3 className="text-xs font-bold text-slate-900 uppercase">Provision User</h3>
+            <form onSubmit={handleCreateUser} className="space-y-2.5">
+              <input
+                type="text"
+                required
+                placeholder="Full Name"
+                value={newUser.fullName}
+                onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
+                className="w-full text-xs border rounded-lg p-2"
+              />
+              <input
+                type="email"
+                required
+                placeholder="Email"
+                value={newUser.email}
+                onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                className="w-full text-xs border rounded-lg p-2"
+              />
+              <input
+                type="password"
+                required
+                placeholder="Password"
+                value={newUser.password}
+                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                className="w-full text-xs border rounded-lg p-2"
+              />
+              <select
+                value={newUser.role}
+                onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+                className="w-full text-xs border rounded-lg p-2"
+              >
+                <option value="employee">Employee</option>
+                <option value="manager">Manager</option>
+                <option value="intern">Intern</option>
+                <option value="client">Client</option>
+              </select>
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => setShowUserModal(false)} className="flex-1 py-1.5 bg-slate-100 rounded-lg text-xs">Cancel</button>
+                <button type="submit" disabled={creatingUser} className="flex-1 py-1.5 bg-black text-white text-xs font-bold rounded-lg">
+                  {creatingUser ? '...' : 'Create'}
                 </button>
               </div>
             </form>
@@ -1056,111 +766,43 @@ export default function WorkspaceOverviewDashboard() {
         </div>
       )}
 
-      {/* Modal: Create Project */}
       {showProjectModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 w-full max-w-lg shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-slate-900">Initiate New Project</h3>
-              <button onClick={() => setShowProjectModal(false)} className="text-slate-400 hover:text-slate-600 text-xs cursor-pointer">✕</button>
-            </div>
-
-            <form onSubmit={handleCreateProject} className="space-y-3.5">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Project Name</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Enterprise Cloud Redesign"
-                  value={newProject.title}
-                  onChange={(e) => setNewProject({ ...newProject, title: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Client Portal</label>
-                  <select
-                    value={newProject.client_id}
-                    onChange={(e) => setNewProject({ ...newProject, client_id: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                  >
-                    <option value="">Select Client</option>
-                    {clients.map((c) => (
-                      <option key={c.id} value={c.id}>{c.full_name || c.email}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Task Owner (Lead)</label>
-                  <select
-                    value={newProject.assigned_to}
-                    onChange={(e) => setNewProject({ ...newProject, assigned_to: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                  >
-                    <option value="">Select Team Member</option>
-                    {employees.map((e) => (
-                      <option key={e.id} value={e.id}>{e.full_name || e.email} ({e.role})</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Lifecycle Status</label>
-                  <select
-                    value={newProject.status}
-                    onChange={(e) => setNewProject({ ...newProject, status: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                  >
-                    {PROJECT_STATUSES.map((status) => (
-                      <option key={status} value={status}>{status}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Max Revisions</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="10"
-                    value={newProject.max_revisions}
-                    onChange={(e) => setNewProject({ ...newProject, max_revisions: Number(e.target.value) })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Current Milestone / Blocker</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Scope Discovery & Tech Architecture"
-                  value={newProject.pending_tasks}
-                  onChange={(e) => setNewProject({ ...newProject, pending_tasks: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Live Preview URL</label>
-                <input
-                  type="url"
-                  placeholder="https://staging.example.com"
-                  value={newProject.preview_url}
-                  onChange={(e) => setNewProject({ ...newProject, preview_url: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                />
-              </div>
-
-              <div className="flex gap-2.5 pt-2">
-                <button type="button" onClick={() => setShowProjectModal(false)} className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 cursor-pointer">
-                  Cancel
-                </button>
-                <button type="submit" disabled={creatingProject} className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white bg-slate-950 hover:bg-black shadow-xs cursor-pointer">
-                  {creatingProject ? 'Launching...' : 'Deploy Project'}
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
+          <div className="bg-white border border-slate-200 rounded-xl p-5 w-full max-w-sm shadow-xl space-y-3">
+            <h3 className="text-xs font-bold text-slate-900 uppercase">New Project</h3>
+            <form onSubmit={handleCreateProject} className="space-y-2.5">
+              <input
+                type="text"
+                required
+                placeholder="Project Title"
+                value={newProject.title}
+                onChange={(e) => setNewProject({ ...newProject, title: e.target.value })}
+                className="w-full text-xs border rounded-lg p-2"
+              />
+              <select
+                value={newProject.assigned_to}
+                onChange={(e) => setNewProject({ ...newProject, assigned_to: e.target.value })}
+                className="w-full text-xs border rounded-lg p-2"
+              >
+                <option value="">Select Lead</option>
+                {employees.map((e) => (
+                  <option key={e.id} value={e.id}>{e.full_name} ({e.role})</option>
+                ))}
+              </select>
+              <select
+                value={newProject.client_id}
+                onChange={(e) => setNewProject({ ...newProject, client_id: e.target.value })}
+                className="w-full text-xs border rounded-lg p-2"
+              >
+                <option value="">Select Client</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={c.id}>{c.full_name || c.email}</option>
+                ))}
+              </select>
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => setShowProjectModal(false)} className="flex-1 py-1.5 bg-slate-100 rounded-lg text-xs">Cancel</button>
+                <button type="submit" disabled={creatingProject} className="flex-1 py-1.5 bg-black text-white text-xs font-bold rounded-lg">
+                  {creatingProject ? '...' : 'Create'}
                 </button>
               </div>
             </form>
@@ -1168,120 +810,41 @@ export default function WorkspaceOverviewDashboard() {
         </div>
       )}
 
-      {/* Modal: Edit Project */}
-      {editingProject && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 w-full max-w-lg shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center">
-              <h3 className="text-sm font-bold text-slate-900">Manage Project #{editingProject.id}</h3>
-              <button onClick={() => setEditingProject(null)} className="text-slate-400 hover:text-slate-600 text-xs cursor-pointer">✕</button>
-            </div>
-
-            <form onSubmit={handleUpdateProject} className="space-y-3.5">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Project Name</label>
-                <input
-                  type="text"
-                  required
-                  value={editingProject.title}
-                  onChange={(e) => setEditingProject({ ...editingProject, title: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Sign-off Approval</label>
-                  <select
-                    value={editingProject.client_signoff || 'Pending'}
-                    onChange={(e) => setEditingProject({ ...editingProject, client_signoff: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                  >
-                    <option value="Pending">Pending Review</option>
-                    <option value="Approved">Approved & Signed Off</option>
-                    <option value="Changes Requested">Changes Requested</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Revisions Logged</label>
-                  <input
-                    type="number"
-                    value={editingProject.used_revisions || 0}
-                    onChange={(e) => setEditingProject({ ...editingProject, used_revisions: Number(e.target.value) })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Lifecycle Status</label>
-                  <select
-                    value={editingProject.status}
-                    onChange={(e) => setEditingProject({ ...editingProject, status: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                  >
-                    {PROJECT_STATUSES.map((status) => (
-                      <option key={status} value={status}>{status}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">Progress: {editingProject.progress}%</label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={editingProject.progress}
-                    onChange={(e) => setEditingProject({ ...editingProject, progress: Number(e.target.value) })}
-                    className="w-full accent-slate-900 mt-2 cursor-pointer"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Current Milestone / Action Item</label>
-                <input
-                  type="text"
-                  value={editingProject.pending_tasks || ''}
-                  onChange={(e) => setEditingProject({ ...editingProject, pending_tasks: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 mb-1">Live Preview URL</label>
-                <input
-                  type="url"
-                  value={editingProject.preview_url || ''}
-                  onChange={(e) => setEditingProject({ ...editingProject, preview_url: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-900 focus:outline-none focus:border-slate-900 focus:bg-white"
-                />
-              </div>
-
-              <div className="flex justify-between items-center pt-2">
-                <button
-                  type="button"
-                  onClick={() => handleDeleteProject(editingProject.id)}
-                  className="text-xs text-rose-600 hover:text-rose-700 font-bold py-2 px-3 rounded-lg hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors cursor-pointer"
-                >
-                  Delete Project
+      {showInvoiceModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
+          <div className="bg-white border border-slate-200 rounded-xl p-5 w-full max-w-sm shadow-xl space-y-3">
+            <h3 className="text-xs font-bold text-slate-900 uppercase">Issue Invoice</h3>
+            <form onSubmit={handleCreateInvoice} className="space-y-2.5">
+              <select
+                required
+                value={newInvoice.project_id}
+                onChange={(e) => setNewInvoice({ ...newInvoice, project_id: e.target.value })}
+                className="w-full text-xs border rounded-lg p-2"
+              >
+                <option value="">Select Project</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>{p.title}</option>
+                ))}
+              </select>
+              <input
+                type="number"
+                required
+                placeholder="Amount (INR)"
+                value={newInvoice.amount}
+                onChange={(e) => setNewInvoice({ ...newInvoice, amount: e.target.value })}
+                className="w-full text-xs border rounded-lg p-2"
+              />
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => setShowInvoiceModal(false)} className="flex-1 py-1.5 bg-slate-100 rounded-lg text-xs">Cancel</button>
+                <button type="submit" disabled={creatingInvoice} className="flex-1 py-1.5 bg-black text-white text-xs font-bold rounded-lg">
+                  {creatingInvoice ? '...' : 'Issue'}
                 </button>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setEditingProject(null)} className="py-2.5 px-4 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 cursor-pointer">
-                    Cancel
-                  </button>
-                  <button type="submit" disabled={updating} className="py-2.5 px-5 rounded-xl text-xs font-bold text-white bg-slate-950 hover:bg-black shadow-xs cursor-pointer">
-                    {updating ? 'Saving...' : 'Save Changes'}
-                  </button>
-                </div>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Global Command Palette (⌘K) & AI Copilot Drawer */}
       <CommandPalette onOpenCopilot={() => setCopilotOpen(true)} />
       <AICopilot isOpen={copilotOpen} onClose={() => setCopilotOpen(false)} />
     </div>
