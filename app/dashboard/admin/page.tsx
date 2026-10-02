@@ -159,9 +159,22 @@ export default function WorkspaceOverviewDashboard() {
     loadData();
   }, [loadData]);
 
+  // Persist availability_status to Supabase profiles
   const handleUpdateAvailability = async (empId: string, status: 'available' | 'busy' | 'on_leave') => {
-    await supabase.from('profiles').update({ availability_status: status }).eq('id', empId);
+    // 1. Optimistic UI update
     setEmployees((prev) => prev.map((e) => (e.id === empId ? { ...e, availability_status: status } : e)));
+
+    // 2. Persist update in Supabase
+    const { error } = await supabase
+      .from('profiles')
+      .update({ availability_status: status })
+      .eq('id', empId);
+
+    if (error) {
+      console.error('Availability update failed:', error);
+      alert('Failed to update status in database: ' + error.message);
+      loadData(); // Revert back on error
+    }
   };
 
   const handleSaveEmployeeDetails = async () => {
@@ -179,13 +192,17 @@ export default function WorkspaceOverviewDashboard() {
       updatePayload.role = editingEmployee.role;
     }
 
-    await supabase
+    const { error } = await supabase
       .from('profiles')
       .update(updatePayload)
       .eq('id', editingEmployee.id);
 
-    setEmployees((prev) => prev.map((e) => (e.id === editingEmployee.id ? { ...e, ...updatePayload } : e)));
-    setEditingEmployee(null);
+    if (!error) {
+      setEmployees((prev) => prev.map((e) => (e.id === editingEmployee.id ? { ...e, ...updatePayload } : e)));
+      setEditingEmployee(null);
+    } else {
+      alert('Error updating profile: ' + error.message);
+    }
   };
 
   const handleDeleteEmployee = async (empId: string) => {
@@ -194,8 +211,12 @@ export default function WorkspaceOverviewDashboard() {
       return;
     }
     if (!confirm('Are you sure you want to remove this user from the system?')) return;
-    await supabase.from('profiles').delete().eq('id', empId);
-    setEmployees((prev) => prev.filter((e) => e.id !== empId));
+    const { error } = await supabase.from('profiles').delete().eq('id', empId);
+    if (!error) {
+      setEmployees((prev) => prev.filter((e) => e.id !== empId));
+    } else {
+      alert('Error removing user: ' + error.message);
+    }
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -247,6 +268,8 @@ export default function WorkspaceOverviewDashboard() {
       setShowProjectModal(false);
       setNewProject({ title: '', client_id: '', assigned_to: '', status: 'In Progress', progress: 0, pending_tasks: '', preview_url: '', max_revisions: 3 });
       loadData();
+    } else {
+      alert('Error creating project: ' + error.message);
     }
   };
 
@@ -284,9 +307,13 @@ export default function WorkspaceOverviewDashboard() {
       return;
     }
     if (!confirm('Are you sure you want to delete this project?')) return;
-    await supabase.from('projects').delete().eq('id', projectId);
-    setEditingProject(null);
-    loadData();
+    const { error } = await supabase.from('projects').delete().eq('id', projectId);
+    if (!error) {
+      setEditingProject(null);
+      loadData();
+    } else {
+      alert('Error deleting project: ' + error.message);
+    }
   };
 
   const handleUpdateLead = async (e: React.FormEvent) => {
@@ -494,14 +521,14 @@ export default function WorkspaceOverviewDashboard() {
           <div className="py-20 text-center text-xs text-slate-400 font-mono">Loading operations...</div>
         ) : (
           <>
-            {/* TAB 1: PROJECTS (Managed by Manager & Admin) */}
+            {/* TAB 1: PROJECTS */}
             {activeTab === 'projects' && (
               <div className="space-y-4 sm:space-y-6">
                 <AdminVerificationQueue />
 
                 {/* Project Selection Dropdown */}
                 <div className="bg-white border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
-                  <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+                  <div className="flex items-center gap-2 flex-1 min-w-60">
                     <Filter size={14} className="text-slate-400 shrink-0" />
                     <label className="text-xs font-bold text-slate-700 whitespace-nowrap">View Project:</label>
                     <select
@@ -767,7 +794,7 @@ export default function WorkspaceOverviewDashboard() {
                             </button>
                           </div>
                         </div>
-                        {inq.message && <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded-lg break-words">"{inq.message}"</p>}
+                        {inq.message && <p className="text-xs text-slate-600 bg-slate-50 p-2 rounded-lg wrap-break-word">"{inq.message}"</p>}
                         {!isConverted ? (
                           <button
                             onClick={() => handleConvertInquiry(inq)}
