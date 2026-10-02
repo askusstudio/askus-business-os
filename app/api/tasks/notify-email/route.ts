@@ -11,18 +11,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Employee email is required' }, { status: 400 });
     }
 
-    // Email send automatically
-    const data = await resend.emails.send({
-      from: 'AskUs Studio <onboarding@resend.dev>', // Apna custom domain ya default test domain
+    // Email send via Verified Custom Domain
+    const { data, error } = await resend.emails.send({
+      from: 'AskUs Studio <notifications@askusstudio.in>',
       to: employeeEmail,
-      subject: `📌 New Task Assigned: ${taskTitle} (${priority})`,
+      subject: `📌 New Task Assigned: ${taskTitle} (${priority || 'Medium'})`,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; rounded: 10px;">
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px; background-color: #ffffff;">
           <h2 style="color: #0f172a; margin-bottom: 8px;">New Task Assignment</h2>
           <p style="color: #475569; font-size: 14px;">Hi <strong>${employeeName || 'Team Member'}</strong>,</p>
           <p style="color: #475569; font-size: 14px;">A new task has been assigned to you in the AskUs Studio workspace.</p>
           
-          <div style="background-color: #f8fafc; border-left: 4px solid #10b981; padding: 12px 16px; margin: 20px 0;">
+          <div style="background-color: #f8fafc; border-left: 4px solid #10b981; padding: 12px 16px; margin: 20px 0; border-radius: 4px;">
             <p style="margin: 4px 0; font-size: 14px;"><strong>📋 Task:</strong> ${taskTitle}</p>
             <p style="margin: 4px 0; font-size: 14px;"><strong>📁 Project:</strong> ${projectName || 'Active Sprint'}</p>
             <p style="margin: 4px 0; font-size: 14px;"><strong>⚡ Priority:</strong> <span style="color: #d97706; font-weight: bold;">${priority || 'Medium'}</span></p>
@@ -40,6 +40,11 @@ export async function POST(req: Request) {
         </div>
       `,
     });
+
+    if (error) {
+      console.error('Resend delivery error:', error);
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
 
     return NextResponse.json({ success: true, data });
   } catch (error: any) {
