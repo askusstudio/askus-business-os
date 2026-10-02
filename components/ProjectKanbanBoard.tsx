@@ -130,8 +130,25 @@ export default function ProjectKanbanBoard({
     }
   };
 
+  // Helper to recalculate project progress from current tasks state
+  const syncProjectProgress = async (currentTasks: any[]) => {
+    if (!currentTasks || currentTasks.length === 0) return;
+    const doneCount = currentTasks.filter(
+      (t) => t.status === 'Done' || t.status === 'Completed' || t.is_completed
+    ).length;
+    const newProgress = Math.round((doneCount / currentTasks.length) * 100);
+
+    await supabase
+      .from('projects')
+      .update({
+        progress: newProgress,
+        status: newProgress === 100 ? 'Completed' : 'In Progress',
+      })
+      .eq('id', Number(projectId) || projectId);
+  };
+
   const handleDragEnd = async (result: DropResult) => {
-    if (!canManageTasks) return; // Prevent drag-and-drop by unauthorized members
+    if (!canManageTasks) return;
 
     const { destination, source, draggableId } = result;
     if (!destination) return;
@@ -149,7 +166,8 @@ export default function ProjectKanbanBoard({
     const destTasks = updatedTasks.filter((t) => t.status !== destCol);
     destTasks.splice(destination.index, 0, movedTask);
 
-    setTasks([...updatedTasks.filter((t) => t.status !== destCol), ...destTasks]);
+    const finalBoardTasks = [...updatedTasks.filter((t) => t.status !== destCol), ...destTasks];
+    setTasks(finalBoardTasks);
 
     await supabase
       .from('project_tasks')
@@ -159,6 +177,9 @@ export default function ProjectKanbanBoard({
         position: destination.index,
       })
       .eq('id', draggableId);
+
+    // Auto sync project progress % on drag & drop
+    await syncProjectProgress(finalBoardTasks);
   };
 
   const handleCreateTask = async (col: string) => {
@@ -204,12 +225,16 @@ export default function ProjectKanbanBoard({
       }
 
       if (data) {
-        setTasks((prev) => [...prev, data]);
+        const nextTasks = [...tasks, data];
+        setTasks(nextTasks);
         setNewTaskTitle('');
         setAssignedTo('');
         setNewTaskDueDate('');
         setNewTaskPriority('Medium');
         setAddingToCol(null);
+
+        // Sync project progress when new tasks are added
+        await syncProjectProgress(nextTasks);
 
         const assignedMember = teamMembers.find((m) => String(m.id) === String(targetAssignee));
 
@@ -218,7 +243,7 @@ export default function ProjectKanbanBoard({
             userId: targetAssignee,
             title: 'New Task Assigned 📌',
             message: `You were assigned "${titleToCreate}" in project #${parsedProjectId}`,
-            type: 'task_assigned',
+            type: 'system',
             link: '/dashboard/employee',
           }).catch((err) => console.log('Notification trigger error:', err));
         }

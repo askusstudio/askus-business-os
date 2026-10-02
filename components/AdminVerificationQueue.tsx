@@ -82,17 +82,45 @@ export default function AdminVerificationQueue() {
 
   const handleApprove = async (task: any) => {
     setActionLoading(task.id);
-    const { error } = await supabase
-      .from('project_tasks')
-      .update({
-        status: 'Done',
-        is_completed: true,
-        verified_at: new Date().toISOString(),
-        verified_by: currentReviewer?.id || null,
-      })
-      .eq('id', task.id);
 
-    if (!error) {
+    try {
+      // 1. Mark task as Done
+      const { error: taskError } = await supabase
+        .from('project_tasks')
+        .update({
+          status: 'Done',
+          is_completed: true,
+          verified_at: new Date().toISOString(),
+          verified_by: currentReviewer?.id || null,
+        })
+        .eq('id', task.id);
+
+      if (taskError) throw taskError;
+
+      // 2. Fetch all tasks for this project to calculate progress %
+      const { data: allProjTasks } = await supabase
+        .from('project_tasks')
+        .select('id, status, is_completed')
+        .eq('project_id', task.project_id);
+
+      if (allProjTasks && allProjTasks.length > 0) {
+        const completedCount = allProjTasks.filter(
+          (t) => t.id === task.id || t.status === 'Done' || t.is_completed
+        ).length;
+
+        const newProgress = Math.round((completedCount / allProjTasks.length) * 100);
+
+        // 3. Update project progress & status in DB
+        await supabase
+          .from('projects')
+          .update({
+            progress: newProgress,
+            status: newProgress === 100 ? 'Completed' : 'In Progress',
+          })
+          .eq('id', task.project_id);
+      }
+
+      // 4. Trigger Notification to Employee
       if (task.assigned_to) {
         triggerNotification({
           userId: task.assigned_to,
@@ -102,11 +130,13 @@ export default function AdminVerificationQueue() {
           link: '/dashboard/employee',
         }).catch((err) => console.log('Notification error:', err));
       }
+
       fetchPendingReviews();
-    } else {
-      alert('Approval error: ' + error.message);
+    } catch (err: any) {
+      alert('Approval error: ' + err.message);
+    } finally {
+      setActionLoading(null);
     }
-    setActionLoading(null);
   };
 
   const handleReject = async (task: any) => {
@@ -127,7 +157,7 @@ export default function AdminVerificationQueue() {
       if (task.assigned_to) {
         triggerNotification({
           userId: task.assigned_to,
-          title: 'Deliverable Needs Rework ⚠️️',
+          title: 'Deliverable Needs Rework ⚠️',
           message: `Feedback for "${task.title}": ${reason}`,
           type: 'system',
           link: '/dashboard/employee',
