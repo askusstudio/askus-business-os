@@ -6,7 +6,31 @@ import ProjectFileManager from '@/components/ProjectFileManager';
 import ProjectTimeTracker from '@/components/ProjectTimeTracker';
 import NotificationBell from '@/components/NotificationBell';
 import SlackWorkspaceChat from '@/components/SlackWorkspaceChat';
-import { FolderKanban, MessageSquare, ShieldCheck, CheckCircle2, Clock, ExternalLink } from 'lucide-react';
+import { 
+  FolderKanban, 
+  MessageSquare, 
+  ShieldCheck, 
+  CheckCircle2, 
+  Clock, 
+  UploadCloud, 
+  Image as ImageIcon, 
+  X,
+  Hourglass
+} from 'lucide-react';
+
+export function calculateDuration(startedAt: string | null, completedAt: string | null) {
+  if (!startedAt || !completedAt) return null;
+
+  const start = new Date(startedAt).getTime();
+  const end = new Date(completedAt).getTime();
+  const diffMinutes = Math.max(1, Math.round((end - start) / (1000 * 60)));
+
+  const hours = Math.floor(diffMinutes / 60);
+  const minutes = diffMinutes % 60;
+
+  if (hours === 0) return `${minutes}m`;
+  return `${hours}h ${minutes}m`;
+}
 
 export default function EmployeeDashboard() {
   const [profile, setProfile] = useState<any>(null);
@@ -33,6 +57,7 @@ export default function EmployeeDashboard() {
   const [submittingProofTask, setSubmittingProofTask] = useState<any | null>(null);
   const [proofUrl, setProofUrl] = useState('');
   const [proofNotes, setProofNotes] = useState('');
+  const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofLoading, setProofLoading] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -184,7 +209,6 @@ export default function EmployeeDashboard() {
     fetchEmployeeData();
   }, [fetchEmployeeData]);
 
-  // Handle employee availability status update
   const handleAvailabilityChange = async (newStatus: 'available' | 'busy' | 'on_leave') => {
     if (!user) return;
     setUpdatingAvailability(true);
@@ -202,7 +226,6 @@ export default function EmployeeDashboard() {
     }
   };
 
-  // Anti-Cheat: Task completion modal open
   const handleInitiateTaskCompletion = (task: any, projectId: string | number) => {
     if (task.is_completed) return;
     if (task.status === 'Under Review') {
@@ -212,34 +235,78 @@ export default function EmployeeDashboard() {
     setSubmittingProofTask({ ...task, currentProjectId: projectId });
     setProofUrl(task.proof_url || '');
     setProofNotes(task.proof_notes || '');
+    setProofFile(null);
   };
 
   const handleSubmitProofOfWork = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!submittingProofTask || !proofUrl.trim()) {
-      alert('Deliverable / PR / Staging link dena mandatory hai!');
+    if (!submittingProofTask) return;
+
+    if (!proofUrl.trim() && !proofFile) {
+      alert('Deliverable link ya screenshot file me se kam se kam ek cheez provide karein.');
       return;
     }
 
     setProofLoading(true);
-    const { error } = await supabase
-      .from('project_tasks')
-      .update({
-        status: 'Under Review',
-        proof_url: proofUrl.trim(),
-        proof_notes: proofNotes.trim(),
-        proof_submitted_at: new Date().toISOString(),
-        is_completed: false,
-      })
-      .eq('id', submittingProofTask.id);
 
-    setProofLoading(false);
-    if (!error) {
-      alert('Proof submit ho gaya hai! Admin review karke verify karega.');
+    try {
+      let attachmentPublicUrl = submittingProofTask.proof_attachment_url || null;
+
+      // 1. File Upload to Supabase Storage
+      if (proofFile) {
+        const fileExt = proofFile.name.split('.').pop();
+        const fileName = `${submittingProofTask.id}-${Date.now()}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('task-proofs')
+          .upload(fileName, proofFile);
+
+        if (uploadError) {
+          throw new Error('Screenshot upload fail: ' + uploadError.message);
+        }
+
+        const { data: urlData } = supabase.storage
+          .from('task-proofs')
+          .getPublicUrl(fileName);
+
+        attachmentPublicUrl = urlData.publicUrl;
+      }
+
+      // 2. Exact Duration Calculation (Time Taken)
+      const now = new Date();
+      const startTime = submittingProofTask.started_at 
+        ? new Date(submittingProofTask.started_at) 
+        : (submittingProofTask.created_at ? new Date(submittingProofTask.created_at) : now);
+      
+      const diffMinutes = Math.max(1, Math.round((now.getTime() - startTime.getTime()) / (1000 * 60)));
+
+      // 3. Database Update with Time & Next Stage
+      const { error } = await supabase
+        .from('project_tasks')
+        .update({
+          status: 'Under Review',
+          proof_url: proofUrl.trim() || null,
+          proof_notes: proofNotes.trim() || null,
+          proof_attachment_url: attachmentPublicUrl,
+          proof_submitted_at: now.toISOString(),
+          completed_at: now.toISOString(),
+          time_taken_minutes: diffMinutes,
+          is_completed: false,
+        })
+        .eq('id', submittingProofTask.id);
+
+      if (error) throw error;
+
+      alert(`Proof submitted! Stage updated to 'Under Review'. Time taken: ${Math.floor(diffMinutes / 60)}h ${diffMinutes % 60}m`);
       setSubmittingProofTask(null);
+      setProofFile(null);
+      setProofUrl('');
+      setProofNotes('');
       fetchEmployeeData();
-    } else {
-      alert('Error: ' + error.message);
+    } catch (err: any) {
+      alert(err.message || 'Error submitting proof');
+    } finally {
+      setProofLoading(false);
     }
   };
 
@@ -254,7 +321,8 @@ export default function EmployeeDashboard() {
         title: titleText, 
         status: 'To Do', 
         is_completed: false, 
-        assigned_to: user.id 
+        assigned_to: user.id,
+        started_at: new Date().toISOString()
       }])
       .select()
       .single();
@@ -304,9 +372,8 @@ export default function EmployeeDashboard() {
             </div>
           </div>
 
-          {/* Right Action Bar: Availability Selector + Notifications + Logout */}
+          {/* Right Action Bar */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* Status Switcher for Employee */}
             <div className="relative">
               <select
                 value={availability}
@@ -450,7 +517,7 @@ export default function EmployeeDashboard() {
                           ))}
                         </div>
 
-                        {/* Task Checklist with PoW guard */}
+                        {/* Task Checklist */}
                         {currentTab === 'tasks' && (
                           <div className="space-y-2 pt-1">
                             <div className="space-y-1.5 max-h-48 overflow-y-auto">
@@ -478,20 +545,30 @@ export default function EmployeeDashboard() {
                                           <div className="w-3.5 h-3.5 rounded border border-slate-300" />
                                         )}
                                       </button>
-                                      <span className={`truncate text-xs ${t.is_completed ? 'line-through' : 'text-slate-800'}`}>
-                                        {t.title || t.task_title}
-                                      </span>
+                                      
+                                      <div className="truncate">
+                                        <p className={`truncate text-xs ${t.is_completed ? 'line-through' : 'text-slate-800'}`}>
+                                          {t.title || t.task_title}
+                                        </p>
+                                        {/* Time duration badge if recorded */}
+                                        {t.time_taken_minutes ? (
+                                          <span className="inline-flex items-center gap-1 text-[9px] font-mono text-emerald-700 bg-emerald-50 px-1 rounded">
+                                            <Hourglass size={9} /> {Math.floor(t.time_taken_minutes / 60)}h {t.time_taken_minutes % 60}m
+                                          </span>
+                                        ) : null}
+                                      </div>
                                     </div>
 
-                                    <div className="shrink-0">
+                                    <div className="shrink-0 flex items-center gap-1.5">
                                       {t.is_completed ? (
                                         <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">Done</span>
                                       ) : t.status === 'Under Review' ? (
                                         <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">Review</span>
                                       ) : (
                                         <button
+                                          type="button"
                                           onClick={() => handleInitiateTaskCompletion(t, p.id)}
-                                          className="text-[10px] font-bold px-2 py-0.5 rounded bg-black text-white cursor-pointer"
+                                          className="text-[10px] font-bold px-2 py-0.5 rounded bg-black text-white hover:bg-slate-800 cursor-pointer"
                                         >
                                           Proof
                                         </button>
@@ -623,27 +700,72 @@ export default function EmployeeDashboard() {
 
       {/* Proof Submission Modal */}
       {submittingProofTask && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
-          <div className="bg-white border border-slate-200 rounded-xl p-5 max-w-sm w-full space-y-3 shadow-xl">
-            <h3 className="text-xs font-bold text-slate-900 uppercase flex items-center gap-1.5">
-              <ShieldCheck size={16} className="text-emerald-700" />
-              Submit Proof of Work
-            </h3>
-            <p className="text-xs text-slate-600 font-semibold">{submittingProofTask.title}</p>
-            <form onSubmit={handleSubmitProofOfWork} className="space-y-2.5">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 max-w-sm w-full space-y-3 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-slate-900 uppercase flex items-center gap-1.5">
+                <ShieldCheck size={16} className="text-emerald-700" />
+                Submit Proof of Work
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setSubmittingProofTask(null)}
+                className="text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 font-semibold line-clamp-1">{submittingProofTask.title}</p>
+            
+            <form onSubmit={handleSubmitProofOfWork} className="space-y-3">
               <div>
                 <label className="text-[10px] font-bold text-slate-600 uppercase block mb-1">
-                  Deliverable / PR / Staging Link *
+                  Deliverable / PR / Staging Link
                 </label>
                 <input
                   type="url"
-                  required
                   placeholder="https://..."
                   value={proofUrl}
                   onChange={(e) => setProofUrl(e.target.value)}
-                  className="w-full text-xs border rounded-lg p-2 focus:outline-none focus:border-black"
+                  className="w-full text-xs border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-black"
                 />
               </div>
+
+              {/* Screenshot / File attachment input */}
+              <div>
+                <label className="text-[10px] font-bold text-slate-600 uppercase block mb-1">
+                  Upload Screenshot / Proof File
+                </label>
+                <label className="border border-dashed border-slate-300 rounded-lg p-3 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*,.pdf,.zip"
+                    className="hidden"
+                    onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+                  />
+                  {proofFile ? (
+                    <div className="flex items-center gap-1.5 text-xs text-slate-800 font-medium w-full justify-between">
+                      <div className="flex items-center gap-1.5 truncate">
+                        <ImageIcon size={14} className="text-emerald-600 shrink-0" />
+                        <span className="truncate text-[11px]">{proofFile.name}</span>
+                      </div>
+                      <span 
+                        className="text-[10px] text-rose-500 font-bold hover:underline shrink-0" 
+                        onClick={(e) => { e.preventDefault(); setProofFile(null); }}
+                      >
+                        Remove
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1 text-slate-400">
+                      <UploadCloud size={20} />
+                      <span className="text-[11px]">Click to upload screenshot or file</span>
+                    </div>
+                  )}
+                </label>
+              </div>
+
               <div>
                 <label className="text-[10px] font-bold text-slate-600 uppercase block mb-1">
                   Summary Notes (Optional)
@@ -651,22 +773,25 @@ export default function EmployeeDashboard() {
                 <textarea
                   rows={2}
                   value={proofNotes}
+                  placeholder="Brief details about what you completed..."
                   onChange={(e) => setProofNotes(e.target.value)}
-                  className="w-full text-xs border rounded-lg p-2 focus:outline-none focus:border-black"
+                  className="w-full text-xs border border-slate-200 rounded-lg p-2 focus:outline-none focus:border-black resize-none"
                 />
               </div>
+
               <div className="flex gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => setSubmittingProofTask(null)}
-                  className="flex-1 py-1.5 bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg cursor-pointer"
+                  disabled={proofLoading}
+                  className="flex-1 py-2 bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-200 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={proofLoading}
-                  className="flex-1 py-1.5 bg-black text-white text-xs font-bold rounded-lg cursor-pointer"
+                  disabled={proofLoading || (!proofUrl.trim() && !proofFile)}
+                  className="flex-1 py-2 bg-black text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50 cursor-pointer"
                 >
                   {proofLoading ? 'Submitting...' : 'Submit'}
                 </button>

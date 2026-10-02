@@ -43,21 +43,30 @@ export default function LoginPage() {
         return;
       }
 
-      const role = profile.role;
-      const employeeRoles = ['director', 'senior_manager', 'manager', 'executive', 'intern'];
+      const role = profile.role?.toLowerCase() || '';
 
-      // Validate selection vs actual role
+      // Operational Workspace Roles (Manager & Super Admins)
+      const isConsoleOperator = ['admin', 'director', 'manager', 'senior_manager'].includes(role);
+      const isRegularEmployee = ['employee', 'intern', 'executive'].includes(role);
+
+      // Validate selection vs actual role & route accurately
       if (selectedType === 'admin') {
-        if (role !== 'admin') {
-          setErrorMsg('Access denied: You do not have Admin privileges.');
+        if (!isConsoleOperator) {
+          setErrorMsg('Access denied: Manager or Admin credentials required for Console.');
           await supabase.auth.signOut();
           setLoading(false);
           return;
         }
         router.push('/dashboard/admin');
       } else if (selectedType === 'employee') {
-        if (!employeeRoles.includes(role)) {
-          setErrorMsg('Access denied: You are not registered as an Employee.');
+        // If a Manager logs in via employee tab, route them directly to console operations
+        if (role === 'manager' || role === 'senior_manager') {
+          router.push('/dashboard/admin');
+          return;
+        }
+
+        if (!isRegularEmployee && !isConsoleOperator) {
+          setErrorMsg('Access denied: You are not registered as internal staff.');
           await supabase.auth.signOut();
           setLoading(false);
           return;
@@ -65,7 +74,7 @@ export default function LoginPage() {
         router.push('/dashboard/employee');
       } else {
         if (role !== 'client') {
-          setErrorMsg('Access denied: Please choose Admin or Employee portal.');
+          setErrorMsg('Access denied: Please sign in via Admin or Employee portal.');
           await supabase.auth.signOut();
           setLoading(false);
           return;
@@ -125,7 +134,7 @@ export default function LoginPage() {
                 : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
             }`}
           >
-            Admin
+            Admin / Mgr
           </button>
           <button
             type="button"

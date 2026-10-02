@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { supabase } from '@/lib/supabase';
 import { triggerNotification } from '@/lib/notifications';
-import { Calendar, Edit3, X } from 'lucide-react';
+import { Calendar, Edit3, X, ExternalLink, Image as ImageIcon, Hourglass } from 'lucide-react';
 
 const COLUMNS = ['To Do', 'In Progress', 'Under Review', 'Done'];
 
@@ -41,6 +41,9 @@ export default function ProjectKanbanBoard({
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userRole, setUserRole] = useState<string>('admin');
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>(teamRoster);
+
+  // Privileged roles capable of managing tasks (Managers & Admins)
+  const canManageTasks = ['admin', 'director', 'manager', 'senior_manager'].includes(userRole);
 
   useEffect(() => {
     if (teamRoster && teamRoster.length > 0) {
@@ -115,8 +118,8 @@ export default function ProjectKanbanBoard({
       .select('*')
       .eq('project_id', Number(projectId) || projectId);
 
-    if (role === 'admin' || role === 'director' || role === 'manager' || role === 'senior_manager') {
-      // Elevated roles see all tasks in this board
+    if (['admin', 'director', 'manager', 'senior_manager'].includes(role)) {
+      // Elevated operational roles see and manage all tasks
     } else if (userId) {
       query = query.eq('assigned_to', userId);
     }
@@ -128,6 +131,8 @@ export default function ProjectKanbanBoard({
   };
 
   const handleDragEnd = async (result: DropResult) => {
+    if (!canManageTasks) return; // Prevent drag-and-drop by unauthorized members
+
     const { destination, source, draggableId } = result;
     if (!destination) return;
     if (destination.droppableId === source.droppableId && destination.index === source.index) return;
@@ -157,12 +162,16 @@ export default function ProjectKanbanBoard({
   };
 
   const handleCreateTask = async (col: string) => {
+    if (!canManageTasks) {
+      alert('Only Managers and Admins can create and assign tasks.');
+      return;
+    }
     if (!newTaskTitle.trim()) return;
     setIsSubmitting(true);
 
     try {
       const parsedProjectId = isNaN(Number(projectId)) ? projectId : Number(projectId);
-      const colTasks = tasks.filter((t) => t.status === col);
+      const colTasks = tasks.filter((t) => isTaskInCol(t, col));
       const titleToCreate = newTaskTitle.trim();
       const targetAssignee = assignedTo && assignedTo.trim() !== '' ? assignedTo : null;
 
@@ -174,13 +183,13 @@ export default function ProjectKanbanBoard({
         status: col,
         is_completed: col === 'Done',
         position: colTasks.length,
+        started_at: new Date().toISOString(),
       };
 
       if (targetAssignee) {
         taskPayload.assigned_to = targetAssignee;
       }
 
-      // Foreign key error fixed: using clean .select().single()
       const { data, error } = await supabase
         .from('project_tasks')
         .insert([taskPayload])
@@ -204,7 +213,6 @@ export default function ProjectKanbanBoard({
 
         const assignedMember = teamMembers.find((m) => String(m.id) === String(targetAssignee));
 
-        // 1. In-App Notification
         if (targetAssignee && targetAssignee !== currentUser?.id) {
           triggerNotification({
             userId: targetAssignee,
@@ -215,7 +223,6 @@ export default function ProjectKanbanBoard({
           }).catch((err) => console.log('Notification trigger error:', err));
         }
 
-        // 2. Automatic Email Notification via Resend
         if (assignedMember?.email) {
           fetch('/api/tasks/notify-email', {
             method: 'POST',
@@ -240,6 +247,7 @@ export default function ProjectKanbanBoard({
 
   const handleSaveTaskEdit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageTasks) return;
     if (!editingTask) return;
     setIsUpdatingTask(true);
 
@@ -267,6 +275,19 @@ export default function ProjectKanbanBoard({
     }
   };
 
+  const isTaskInCol = (task: any, colName: string) => {
+    const rawStatus = (task.status || 'To Do').trim().toLowerCase();
+    const target = colName.trim().toLowerCase();
+
+    if (target === 'under review') {
+      return rawStatus === 'under review' || rawStatus === 'review';
+    }
+    if (target === 'done') {
+      return rawStatus === 'done' || rawStatus === 'completed' || task.is_completed;
+    }
+    return rawStatus === target;
+  };
+
   const getPriorityBadge = (priority: string) => {
     switch (priority) {
       case 'Urgent':
@@ -286,7 +307,7 @@ export default function ProjectKanbanBoard({
       <div className="flex items-center justify-between bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl text-xs">
         <span className="text-slate-600">
           Access Mode: <strong className="text-slate-900 uppercase font-bold">{userRole}</strong>
-          {userRole === 'employee' || userRole === 'intern' ? ' (Showing tasks assigned to you)' : ' (Full Board Visibility)'}
+          {canManageTasks ? ' (Operational Manager Control)' : ' (Assigned Tasks Only)'}
         </span>
         <span className="text-[11px] font-mono text-slate-500 font-semibold">
           {tasks.length} Active Tasks
@@ -297,10 +318,10 @@ export default function ProjectKanbanBoard({
       <DragDropContext onDragEnd={handleDragEnd}>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           {COLUMNS.map((col) => {
-            const colTasks = tasks.filter((t) => (t.status || 'To Do') === col);
+            const colTasks = tasks.filter((t) => isTaskInCol(t, col));
 
             return (
-              <div key={col} className="bg-slate-50/80 border border-slate-200 rounded-xl p-3 flex flex-col justify-between min-h-[300px]">
+              <div key={col} className="bg-slate-50/80 border border-slate-200 rounded-xl p-3 flex flex-col justify-between min-h-75">
                 <div>
                   <div className="flex items-center justify-between pb-2 border-b border-slate-200 mb-2">
                     <span className="text-xs font-bold text-slate-700">{col}</span>
@@ -309,14 +330,19 @@ export default function ProjectKanbanBoard({
                     </span>
                   </div>
 
-                  <Droppable droppableId={col}>
+                  <Droppable droppableId={col} isDropDisabled={!canManageTasks}>
                     {(provided) => (
-                      <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2 min-h-[160px]">
+                      <div ref={provided.innerRef} {...provided.droppableProps} className="space-y-2 min-h-40">
                         {colTasks.map((t, index) => {
                           const assignee = teamMembers.find((m) => String(m.id) === String(t.assigned_to));
 
                           return (
-                            <Draggable key={String(t.id)} draggableId={String(t.id)} index={index}>
+                            <Draggable 
+                              key={String(t.id)} 
+                              draggableId={String(t.id)} 
+                              index={index}
+                              isDragDisabled={!canManageTasks}
+                            >
                               {(provided, snapshot) => (
                                 <div
                                   ref={provided.innerRef}
@@ -330,30 +356,65 @@ export default function ProjectKanbanBoard({
                                 >
                                   {/* Task Title + Quick Edit Button */}
                                   <div className="flex items-start justify-between gap-1">
-                                    <p className={`text-slate-800 font-medium leading-snug ${t.is_completed ? 'line-through text-slate-400' : ''}`}>
+                                    <p className={`text-slate-800 font-medium leading-snug wrap-break-word ${t.is_completed ? 'line-through text-slate-400' : ''}`}>
                                       {t.title || t.task_title}
                                     </p>
-                                    <button
-                                      type="button"
-                                      onClick={() => setEditingTask(t)}
-                                      className="text-slate-400 hover:text-black cursor-pointer p-0.5 rounded"
-                                      title="Edit Task"
-                                    >
-                                      <Edit3 size={12} />
-                                    </button>
+                                    {canManageTasks && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditingTask(t)}
+                                        className="text-slate-400 hover:text-black cursor-pointer p-0.5 rounded shrink-0"
+                                        title="Edit Task"
+                                      >
+                                        <Edit3 size={12} />
+                                      </button>
+                                    )}
                                   </div>
 
-                                  {/* Priority and Due Date Badges */}
+                                  {/* Priority, Due Date & Time Duration */}
                                   <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
                                     <span className={`px-1.5 py-0.2 rounded border font-bold ${getPriorityBadge(t.priority || 'Medium')}`}>
                                       {t.priority || 'Medium'}
                                     </span>
+
                                     {t.due_date && (
                                       <span className="text-slate-500 font-mono flex items-center gap-0.5">
                                         <Calendar size={10} /> {t.due_date}
                                       </span>
                                     )}
+
+                                    {t.time_taken_minutes ? (
+                                      <span className="font-mono text-emerald-800 bg-emerald-50 border border-emerald-200 px-1.5 py-0.2 rounded flex items-center gap-1">
+                                        <Hourglass size={9} /> {Math.floor(t.time_taken_minutes / 60)}h {t.time_taken_minutes % 60}m
+                                      </span>
+                                    ) : null}
                                   </div>
+
+                                  {/* Proof of Work Attachments */}
+                                  {(t.proof_url || t.proof_attachment_url) && (
+                                    <div className="pt-1 border-t border-slate-100 flex items-center gap-2 text-[10px] flex-wrap">
+                                      {t.proof_url && (
+                                        <a
+                                          href={t.proof_url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="text-sky-600 hover:underline font-semibold flex items-center gap-0.5"
+                                        >
+                                          <ExternalLink size={10} /> Link
+                                        </a>
+                                      )}
+                                      {t.proof_attachment_url && (
+                                        <a
+                                          href={t.proof_attachment_url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-200 font-semibold flex items-center gap-0.5"
+                                        >
+                                          <ImageIcon size={10} /> Proof ↗
+                                        </a>
+                                      )}
+                                    </div>
+                                  )}
 
                                   {/* Assignee Details */}
                                   <div className="text-[10px] text-slate-400 border-t border-slate-50 pt-1.5 flex items-center justify-between">
@@ -384,93 +445,95 @@ export default function ProjectKanbanBoard({
                   </Droppable>
                 </div>
 
-                {/* Add Task Form with Priority and Due Date */}
-                <div className="pt-2 border-t border-slate-200 mt-2">
-                  {addingToCol === col ? (
-                    <div className="space-y-1.5">
-                      <input
-                        type="text"
-                        placeholder="Task title..."
-                        value={newTaskTitle}
-                        onChange={(e) => setNewTaskTitle(e.target.value)}
-                        className="w-full text-xs bg-white border border-slate-300 rounded-lg p-2 focus:outline-none focus:border-black"
-                        autoFocus
-                      />
+                {/* Add Task Form: Rendered only for Managers and Admins */}
+                {canManageTasks && (
+                  <div className="pt-2 border-t border-slate-200 mt-2">
+                    {addingToCol === col ? (
+                      <div className="space-y-1.5">
+                        <input
+                          type="text"
+                          placeholder="Task title..."
+                          value={newTaskTitle}
+                          onChange={(e) => setNewTaskTitle(e.target.value)}
+                          className="w-full text-xs bg-white border border-slate-300 rounded-lg p-2 focus:outline-none focus:border-black"
+                          autoFocus
+                        />
 
-                      <div className="grid grid-cols-2 gap-1.5">
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <select
+                            value={newTaskPriority}
+                            onChange={(e) => setNewTaskPriority(e.target.value)}
+                            className="w-full text-[11px] bg-white border border-slate-300 rounded-lg p-1.5 text-slate-700 outline-none cursor-pointer"
+                          >
+                            <option value="Low">Low</option>
+                            <option value="Medium">Medium</option>
+                            <option value="High">High</option>
+                            <option value="Urgent">🚨 Urgent</option>
+                          </select>
+
+                          <input
+                            type="date"
+                            value={newTaskDueDate}
+                            onChange={(e) => setNewTaskDueDate(e.target.value)}
+                            className="w-full text-[11px] bg-white border border-slate-300 rounded-lg p-1.5 text-slate-700 outline-none cursor-pointer"
+                          />
+                        </div>
+
                         <select
-                          value={newTaskPriority}
-                          onChange={(e) => setNewTaskPriority(e.target.value)}
+                          value={assignedTo}
+                          onChange={(e) => setAssignedTo(e.target.value)}
                           className="w-full text-[11px] bg-white border border-slate-300 rounded-lg p-1.5 text-slate-700 outline-none cursor-pointer"
                         >
-                          <option value="Low">Low</option>
-                          <option value="Medium">Medium</option>
-                          <option value="High">High</option>
-                          <option value="Urgent">🚨 Urgent</option>
+                          <option value="">Assign to (Default: Unassigned)</option>
+                          {teamMembers.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.full_name || m.email?.split('@')[0]} ({m.employee_code || m.role || 'Member'})
+                            </option>
+                          ))}
                         </select>
 
-                        <input
-                          type="date"
-                          value={newTaskDueDate}
-                          onChange={(e) => setNewTaskDueDate(e.target.value)}
-                          className="w-full text-[11px] bg-white border border-slate-300 rounded-lg p-1.5 text-slate-700 outline-none cursor-pointer"
-                        />
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            disabled={isSubmitting}
+                            onClick={() => handleCreateTask(col)}
+                            className="flex-1 text-[10px] font-bold bg-black hover:bg-slate-800 text-white rounded-lg p-1.5 cursor-pointer disabled:opacity-50"
+                          >
+                            {isSubmitting ? 'Adding...' : 'Add'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAddingToCol(null);
+                              setNewTaskTitle('');
+                              setAssignedTo('');
+                              setNewTaskDueDate('');
+                            }}
+                            className="flex-1 text-[10px] font-semibold bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg p-1.5 cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       </div>
-
-                      <select
-                        value={assignedTo}
-                        onChange={(e) => setAssignedTo(e.target.value)}
-                        className="w-full text-[11px] bg-white border border-slate-300 rounded-lg p-1.5 text-slate-700 outline-none cursor-pointer"
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => { setAddingToCol(col); setNewTaskTitle(''); }}
+                        className="w-full text-left text-[11px] font-medium text-slate-500 hover:text-slate-900 py-1 hover:bg-white rounded px-1.5 transition-colors cursor-pointer"
                       >
-                        <option value="">Assign to (Default: Unassigned)</option>
-                        {teamMembers.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.full_name || m.email?.split('@')[0]} ({m.employee_code || m.role || 'Member'})
-                          </option>
-                        ))}
-                      </select>
-
-                      <div className="flex gap-1.5">
-                        <button
-                          type="button"
-                          disabled={isSubmitting}
-                          onClick={() => handleCreateTask(col)}
-                          className="flex-1 text-[10px] font-bold bg-black hover:bg-slate-800 text-white rounded-lg p-1.5 cursor-pointer disabled:opacity-50"
-                        >
-                          {isSubmitting ? 'Adding...' : 'Add'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setAddingToCol(null);
-                            setNewTaskTitle('');
-                            setAssignedTo('');
-                            setNewTaskDueDate('');
-                          }}
-                          className="flex-1 text-[10px] font-semibold bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg p-1.5 cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => { setAddingToCol(col); setNewTaskTitle(''); }}
-                      className="w-full text-left text-[11px] font-medium text-slate-500 hover:text-slate-900 py-1 hover:bg-white rounded px-1.5 transition-colors cursor-pointer"
-                    >
-                      + Add task
-                    </button>
-                  )}
-                </div>
+                        + Add task
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       </DragDropContext>
 
-      {/* Task Edit Modal */}
-      {editingTask && (
+      {/* Task Edit Modal: Protected for Managers & Admins */}
+      {editingTask && canManageTasks && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
           <div className="bg-white border border-slate-200 rounded-xl p-5 max-w-sm w-full space-y-3 shadow-xl">
             <div className="flex items-center justify-between">

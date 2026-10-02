@@ -1,5 +1,5 @@
 'use client'
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Bell, Check, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
@@ -7,6 +7,7 @@ import Link from 'next/link';
 export default function NotificationBell({ userId }: { userId: string }) {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -29,8 +30,17 @@ export default function NotificationBell({ userId }: { userId: string }) {
       )
       .subscribe();
 
+    // Bahar click karne par dropdown band karne ke liye
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+
     return () => {
       supabase.removeChannel(channel);
+      document.removeEventListener('mousedown', handleOutsideClick);
     };
   }, [userId]);
 
@@ -57,10 +67,11 @@ export default function NotificationBell({ userId }: { userId: string }) {
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   return (
-    <div className="relative">
+    <div className="relative inline-block" ref={containerRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="relative p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
+        aria-label="Notifications"
       >
         <Bell size={16} />
         {unreadCount > 0 && (
@@ -71,7 +82,7 @@ export default function NotificationBell({ userId }: { userId: string }) {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden">
+        <div className="fixed inset-x-3 top-16 sm:inset-auto sm:absolute sm:right-0 sm:top-full sm:mt-2 sm:w-80 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 overflow-hidden">
           <div className="p-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
             <span className="text-xs font-bold text-slate-900">Notifications</span>
             {unreadCount > 0 && (
@@ -94,12 +105,12 @@ export default function NotificationBell({ userId }: { userId: string }) {
                   className={`p-3 text-xs transition-colors ${n.is_read ? 'bg-white' : 'bg-slate-50/80 font-medium'}`}
                 >
                   <div className="flex items-start justify-between gap-1">
-                    <span className="font-bold text-slate-900">{n.title}</span>
-                    <span className="text-[9px] text-slate-400 font-mono">
+                    <span className="font-bold text-slate-900 break-words">{n.title}</span>
+                    <span className="text-[9px] text-slate-400 font-mono shrink-0">
                       {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                  <p className="text-slate-600 text-[11px] mt-0.5 leading-relaxed">{n.message}</p>
+                  <p className="text-slate-600 text-[11px] mt-0.5 leading-relaxed break-words">{n.message}</p>
                   {n.link && (
                     <Link
                       href={n.link}

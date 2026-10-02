@@ -24,7 +24,8 @@ import {
   Trash2, 
   CheckCircle2, 
   MessageSquare,
-  Filter
+  Filter,
+  ShieldAlert
 } from 'lucide-react';
 
 const PROJECT_STATUSES = [
@@ -69,6 +70,7 @@ export default function WorkspaceOverviewDashboard() {
   const [editingProject, setEditingProject] = useState<any | null>(null);
   const [updating, setUpdating] = useState(false);
 
+  // User Management State (Exclusive to Admin)
   const [showUserModal, setShowUserModal] = useState(false);
   const [creatingUser, setCreatingUser] = useState(false);
   const [newUser, setNewUser] = useState({ 
@@ -92,6 +94,10 @@ export default function WorkspaceOverviewDashboard() {
 
   const router = useRouter();
 
+  // Role Checker Flags
+  const isSuperAdmin = currentUserProfile?.role === 'admin' || currentUserProfile?.role === 'director';
+  const isManager = currentUserProfile?.role === 'manager';
+
   const loadData = useCallback(async () => {
     try {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -108,8 +114,10 @@ export default function WorkspaceOverviewDashboard() {
         .eq('id', user.id)
         .single();
 
-      if (profile?.role !== 'admin' && profile?.role !== 'director') {
-        router.push('/dashboard/client');
+      // Manager, Admin, and Director are authorized to operate this console
+      const allowedRoles = ['admin', 'director', 'manager'];
+      if (!allowedRoles.includes(profile?.role)) {
+        router.push('/dashboard/employee');
         return;
       }
       setCurrentUserProfile(profile);
@@ -141,7 +149,7 @@ export default function WorkspaceOverviewDashboard() {
       if (clientData) setClients(clientData);
       if (invData) setInvoices(invData);
     } catch (err) {
-      console.error('Error loading admin workspace:', err);
+      console.error('Error loading operations workspace:', err);
     } finally {
       setLoading(false);
     }
@@ -158,29 +166,44 @@ export default function WorkspaceOverviewDashboard() {
 
   const handleSaveEmployeeDetails = async () => {
     if (!editingEmployee) return;
+
+    // Strict guard: Only admin can modify system roles
+    const updatePayload: any = {
+      full_name: editingEmployee.full_name,
+      employee_code: editingEmployee.employee_code || null,
+      phone: editingEmployee.phone || null,
+      availability_status: editingEmployee.availability_status || 'available',
+    };
+
+    if (isSuperAdmin) {
+      updatePayload.role = editingEmployee.role;
+    }
+
     await supabase
       .from('profiles')
-      .update({
-        full_name: editingEmployee.full_name,
-        role: editingEmployee.role,
-        employee_code: editingEmployee.employee_code || null,
-        phone: editingEmployee.phone || null,
-        availability_status: editingEmployee.availability_status || 'available',
-      })
+      .update(updatePayload)
       .eq('id', editingEmployee.id);
 
-    setEmployees((prev) => prev.map((e) => (e.id === editingEmployee.id ? editingEmployee : e)));
+    setEmployees((prev) => prev.map((e) => (e.id === editingEmployee.id ? { ...e, ...updatePayload } : e)));
     setEditingEmployee(null);
   };
 
   const handleDeleteEmployee = async (empId: string) => {
-    if (!confirm('Are you sure you want to remove this user?')) return;
+    if (!isSuperAdmin) {
+      alert('Security Alert: Only Admins have user termination permissions.');
+      return;
+    }
+    if (!confirm('Are you sure you want to remove this user from the system?')) return;
     await supabase.from('profiles').delete().eq('id', empId);
     setEmployees((prev) => prev.filter((e) => e.id !== empId));
   };
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isSuperAdmin) {
+      alert('Security Alert: Only Admins can provision new users.');
+      return;
+    }
     setCreatingUser(true);
     try {
       const res = await fetch('/api/admin/users', {
@@ -256,13 +279,16 @@ export default function WorkspaceOverviewDashboard() {
   };
 
   const handleDeleteProject = async (projectId: string | number) => {
+    if (!isSuperAdmin) {
+      alert('Notice: Only Admin can delete a project permanently. Managers can archive instead.');
+      return;
+    }
     if (!confirm('Are you sure you want to delete this project?')) return;
     await supabase.from('projects').delete().eq('id', projectId);
     setEditingProject(null);
     loadData();
   };
 
-  // Pipeline Lead Update
   const handleUpdateLead = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingLead) return;
@@ -317,6 +343,10 @@ export default function WorkspaceOverviewDashboard() {
 
   const handleCreateInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isSuperAdmin) {
+      alert('Invoicing operations are restricted to Admin only.');
+      return;
+    }
     if (!newInvoice.project_id || !newInvoice.amount) return;
     setCreatingInvoice(true);
 
@@ -345,6 +375,10 @@ export default function WorkspaceOverviewDashboard() {
   };
 
   const handleToggleInvoiceStatus = async (invId: number, currentStatus: string) => {
+    if (!isSuperAdmin) {
+      alert('Only Admin can approve and mark invoices as Paid.');
+      return;
+    }
     const nextStatus = currentStatus === 'Paid' ? 'Unpaid' : 'Paid';
     await supabase.from('project_invoices').update({ status: nextStatus, paid_at: nextStatus === 'Paid' ? new Date() : null }).eq('id', invId);
     loadData();
@@ -353,7 +387,6 @@ export default function WorkspaceOverviewDashboard() {
   const totalRevenue = invoices.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
   const paidRevenue = invoices.filter((i) => i.status === 'Paid').reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
 
-  // Filter projects by dropdown selection
   const filteredProjects = selectedProjectId === 'all'
     ? projects
     : projects.filter((p) => String(p.id) === String(selectedProjectId));
@@ -370,11 +403,17 @@ export default function WorkspaceOverviewDashboard() {
             <div className="truncate">
               <div className="flex items-center gap-1.5 truncate">
                 <h1 className="text-xs sm:text-sm font-bold text-slate-900 tracking-tight truncate">AskUs Studio</h1>
-                <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
-                  Console
+                <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border uppercase ${
+                  isSuperAdmin 
+                    ? 'bg-rose-50 text-rose-800 border-rose-200' 
+                    : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                }`}>
+                  {isSuperAdmin ? 'Super Admin' : 'Manager Console'}
                 </span>
               </div>
-              <p className="text-[10px] text-slate-400 hidden sm:block">Operations & Workspaces</p>
+              <p className="text-[10px] text-slate-400 hidden sm:block">
+                {isSuperAdmin ? 'System Governance & Operations' : 'Primary Project & Delivery Operations'}
+              </p>
             </div>
           </div>
 
@@ -386,6 +425,8 @@ export default function WorkspaceOverviewDashboard() {
               <Sparkles size={12} />
               <span className="hidden sm:inline">AI Copilot</span>
             </button>
+
+            {/* Both Manager & Admin can create projects */}
             <button
               onClick={() => setShowProjectModal(true)}
               className="px-2.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold text-white bg-black hover:bg-slate-800 transition-colors flex items-center gap-1 cursor-pointer"
@@ -393,12 +434,17 @@ export default function WorkspaceOverviewDashboard() {
               <Plus size={12} />
               <span>Project</span>
             </button>
-            <button
-              onClick={() => setShowUserModal(true)}
-              className="px-2 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 cursor-pointer"
-            >
-              + User
-            </button>
+
+            {/* Provision User is restricted exclusively to Super Admin */}
+            {isSuperAdmin && (
+              <button
+                onClick={() => setShowUserModal(true)}
+                className="px-2 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 cursor-pointer"
+              >
+                + User
+              </button>
+            )}
+
             {currentUserId && <NotificationBell userId={currentUserId} />}
             <button
               onClick={async () => { await supabase.auth.signOut(); router.push('/login'); }}
@@ -448,7 +494,7 @@ export default function WorkspaceOverviewDashboard() {
           <div className="py-20 text-center text-xs text-slate-400 font-mono">Loading operations...</div>
         ) : (
           <>
-            {/* TAB 1: PROJECTS */}
+            {/* TAB 1: PROJECTS (Managed by Manager & Admin) */}
             {activeTab === 'projects' && (
               <div className="space-y-4 sm:space-y-6">
                 <AdminVerificationQueue />
@@ -522,12 +568,15 @@ export default function WorkspaceOverviewDashboard() {
                               >
                                 Edit
                               </button>
-                              <button
-                                onClick={() => handleDeleteProject(proj.id)}
-                                className="px-2 py-1 rounded-lg text-[11px] font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer"
-                              >
-                                Delete
-                              </button>
+                              {/* Only Super Admin can completely delete a project */}
+                              {isSuperAdmin && (
+                                <button
+                                  onClick={() => handleDeleteProject(proj.id)}
+                                  className="px-2 py-1 rounded-lg text-[11px] font-semibold text-rose-600 hover:bg-rose-50 cursor-pointer"
+                                >
+                                  Delete
+                                </button>
+                              )}
                             </div>
                           </div>
 
@@ -581,7 +630,7 @@ export default function WorkspaceOverviewDashboard() {
                                 projectId={proj.id}
                                 projectTitle={proj.title}
                                 currentUserId={currentUserId}
-                                currentUserRole="admin"
+                                currentUserRole={currentUserProfile?.role || 'admin'}
                               />
                             )}
                           </div>
@@ -601,12 +650,14 @@ export default function WorkspaceOverviewDashboard() {
                     <h2 className="text-xs sm:text-sm font-bold text-slate-900">Team Directory & Unique IDs</h2>
                     <p className="text-[11px] text-slate-500">Live member status & role allocation</p>
                   </div>
-                  <button
-                    onClick={() => setShowUserModal(true)}
-                    className="px-2.5 py-1.5 bg-black text-white rounded-lg text-xs font-bold cursor-pointer"
-                  >
-                    + Provision User
-                  </button>
+                  {isSuperAdmin && (
+                    <button
+                      onClick={() => setShowUserModal(true)}
+                      className="px-2.5 py-1.5 bg-black text-white rounded-lg text-xs font-bold cursor-pointer"
+                    >
+                      + Provision User
+                    </button>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
@@ -626,7 +677,6 @@ export default function WorkspaceOverviewDashboard() {
                                 </span>
                               </div>
                               <p className="text-[10px] text-slate-400 truncate">{emp.email}</p>
-                              {/* Display phone number cleanly only when it exists */}
                               {emp.phone && (
                                 <p className="text-[10px] text-slate-500 font-mono mt-0.5">{emp.phone}</p>
                               )}
@@ -656,17 +706,20 @@ export default function WorkspaceOverviewDashboard() {
                             <button
                               onClick={() => setEditingEmployee(emp)}
                               className="p-1 hover:bg-slate-100 rounded text-slate-600 cursor-pointer"
-                              title="Edit Employee & ID"
+                              title="Edit Employee Details"
                             >
                               <Edit3 size={13} />
                             </button>
-                            <button
-                              onClick={() => handleDeleteEmployee(emp.id)}
-                              className="p-1 hover:bg-rose-50 rounded text-rose-500 cursor-pointer"
-                              title="Remove Employee"
-                            >
-                              <Trash2 size={13} />
-                            </button>
+                            {/* Deletion button only visible to super admin */}
+                            {isSuperAdmin && (
+                              <button
+                                onClick={() => handleDeleteEmployee(emp.id)}
+                                className="p-1 hover:bg-rose-50 rounded text-rose-500 cursor-pointer"
+                                title="Remove User"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -739,13 +792,20 @@ export default function WorkspaceOverviewDashboard() {
             {activeTab === 'finance' && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xs sm:text-sm font-bold text-slate-900">Financial Ledger</h2>
-                  <button
-                    onClick={() => setShowInvoiceModal(true)}
-                    className="px-2.5 py-1.5 bg-black text-white rounded-lg text-xs font-bold cursor-pointer"
-                  >
-                    + Invoice
-                  </button>
+                  <div>
+                    <h2 className="text-xs sm:text-sm font-bold text-slate-900">Financial Ledger</h2>
+                    {!isSuperAdmin && (
+                      <p className="text-[11px] text-amber-700">Financial issuance is restricted to Super Admin.</p>
+                    )}
+                  </div>
+                  {isSuperAdmin && (
+                    <button
+                      onClick={() => setShowInvoiceModal(true)}
+                      className="px-2.5 py-1.5 bg-black text-white rounded-lg text-xs font-bold cursor-pointer"
+                    >
+                      + Invoice
+                    </button>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
@@ -777,14 +837,22 @@ export default function WorkspaceOverviewDashboard() {
                           </div>
                           <p className="text-[10px] text-slate-500 truncate">{inv.description || 'Milestone'}</p>
                         </div>
-                        <button
-                          onClick={() => handleToggleInvoiceStatus(inv.id, inv.status)}
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold border shrink-0 cursor-pointer ${
+                        {isSuperAdmin ? (
+                          <button
+                            onClick={() => handleToggleInvoiceStatus(inv.id, inv.status)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold border shrink-0 cursor-pointer ${
+                              inv.status === 'Paid' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-50 text-amber-800 border-amber-300'
+                            }`}
+                          >
+                            {inv.status === 'Paid' ? '✓ Paid' : 'Mark Paid'}
+                          </button>
+                        ) : (
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border shrink-0 ${
                             inv.status === 'Paid' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-50 text-amber-800 border-amber-300'
-                          }`}
-                        >
-                          {inv.status === 'Paid' ? '✓ Paid' : 'Mark Paid'}
-                        </button>
+                          }`}>
+                            {inv.status}
+                          </span>
+                        )}
                       </div>
                     ))
                   )}
@@ -798,7 +866,7 @@ export default function WorkspaceOverviewDashboard() {
                 <SlackWorkspaceChat
                   currentUser={{
                     id: currentUserId,
-                    full_name: currentUserProfile?.full_name || 'Admin',
+                    full_name: currentUserProfile?.full_name || 'Console User',
                     role: currentUserProfile?.role || 'admin',
                   }}
                 />
@@ -927,18 +995,27 @@ export default function WorkspaceOverviewDashboard() {
                   className="w-full text-xs border rounded-lg p-2 font-mono"
                 />
               </div>
-              <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Role</label>
-                <select
-                  value={editingEmployee.role}
-                  onChange={(e) => setEditingEmployee({ ...editingEmployee, role: e.target.value })}
-                  className="w-full text-xs border rounded-lg p-2 cursor-pointer"
-                >
-                  <option value="employee">Employee</option>
-                  <option value="manager">Manager</option>
-                  <option value="intern">Intern</option>
-                </select>
-              </div>
+              {/* Only Super Admin can change Roles */}
+              {isSuperAdmin ? (
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">System Role</label>
+                  <select
+                    value={editingEmployee.role}
+                    onChange={(e) => setEditingEmployee({ ...editingEmployee, role: e.target.value })}
+                    className="w-full text-xs border rounded-lg p-2 cursor-pointer font-semibold text-rose-700 bg-rose-50"
+                  >
+                    <option value="employee">Employee</option>
+                    <option value="manager">Manager</option>
+                    <option value="intern">Intern</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+              ) : (
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Role</span>
+                  <p className="text-xs font-semibold text-slate-700 uppercase bg-slate-50 p-2 rounded">{editingEmployee.role}</p>
+                </div>
+              )}
               <div className="flex gap-2 pt-2">
                 <button 
                   type="button" 
@@ -960,8 +1037,8 @@ export default function WorkspaceOverviewDashboard() {
         </div>
       )}
 
-      {/* USER PROVISION MODAL */}
-      {showUserModal && (
+      {/* USER PROVISION MODAL (Strictly Super Admin) */}
+      {showUserModal && isSuperAdmin && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
           <div className="bg-white border border-slate-200 rounded-xl p-5 w-full max-w-sm shadow-xl space-y-3">
             <h3 className="text-xs font-bold text-slate-900 uppercase">Provision User</h3>
@@ -1007,12 +1084,13 @@ export default function WorkspaceOverviewDashboard() {
               <select
                 value={newUser.role}
                 onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-                className="w-full text-xs border rounded-lg p-2 cursor-pointer"
+                className="w-full text-xs border rounded-lg p-2 cursor-pointer font-bold"
               >
                 <option value="employee">Employee</option>
                 <option value="manager">Manager</option>
                 <option value="intern">Intern</option>
                 <option value="client">Client</option>
+                <option value="admin">Admin</option>
               </select>
               <div className="flex gap-2 pt-1">
                 <button type="button" onClick={() => setShowUserModal(false)} className="flex-1 py-1.5 bg-slate-100 rounded-lg text-xs cursor-pointer">Cancel</button>
@@ -1070,8 +1148,8 @@ export default function WorkspaceOverviewDashboard() {
         </div>
       )}
 
-      {/* INVOICE MODAL */}
-      {showInvoiceModal && (
+      {/* INVOICE MODAL (Strictly Super Admin) */}
+      {showInvoiceModal && isSuperAdmin && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
           <div className="bg-white border border-slate-200 rounded-xl p-5 w-full max-w-sm shadow-xl space-y-3">
             <h3 className="text-xs font-bold text-slate-900 uppercase">Issue Invoice</h3>
