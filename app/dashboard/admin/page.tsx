@@ -1,5 +1,5 @@
 'use client'
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import ProjectFileManager from '@/components/ProjectFileManager';
@@ -25,7 +25,14 @@ import {
   CheckCircle2, 
   MessageSquare,
   Filter,
-  ShieldAlert
+  ShieldAlert,
+  FileText,
+  UserCheck,
+  ChevronDown,
+  ChevronUp,
+  Calendar,
+  Clock,
+  Search
 } from 'lucide-react';
 
 const PROJECT_STATUSES = [
@@ -39,19 +46,25 @@ const PROJECT_STATUSES = [
 ];
 
 export default function WorkspaceOverviewDashboard() {
-  const [activeTab, setActiveTab] = useState<'projects' | 'team' | 'crm' | 'finance' | 'slack'>('projects');
+  const [activeTab, setActiveTab] = useState<'projects' | 'team' | 'clients' | 'crm' | 'finance' | 'slack'>('projects');
   const [projects, setProjects] = useState<any[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('all');
   const [inquiries, setInquiries] = useState<any[]>([]);
   const [employees, setEmployees] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
+  const [allTasks, setAllTasks] = useState<any[]>([]);
   const [totalHoursWorked, setTotalHoursWorked] = useState<number>(0);
   const [projectHoursMap, setProjectHoursMap] = useState<Record<string, number>>({});
   const [currentUserId, setCurrentUserId] = useState<string>('');
   const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
   const [activeProjectTab, setActiveProjectTab] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+
+  // Task Filter & Expansion States (Sir's Requirements)
+  const [taskDateFilter, setTaskDateFilter] = useState<'all' | 'yesterday' | 'week' | '15days' | 'month'>('all');
+  const [expandedTasksProject, setExpandedTasksProject] = useState<Record<string, boolean>>({});
+  const [clientSearch, setClientSearch] = useState('');
 
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [showProjectModal, setShowProjectModal] = useState(false);
@@ -75,11 +88,12 @@ export default function WorkspaceOverviewDashboard() {
   const [creatingUser, setCreatingUser] = useState(false);
   const [newUser, setNewUser] = useState({ 
     fullName: '', 
+    username: '', 
     email: '', 
     password: '', 
-    role: 'employee',
-    employeeCode: '',
-    phone: ''
+    role: 'employee', 
+    employeeCode: '', 
+    phone: '' 
   });
   const [editingEmployee, setEditingEmployee] = useState<any | null>(null);
 
@@ -87,14 +101,23 @@ export default function WorkspaceOverviewDashboard() {
   const [editingLead, setEditingLead] = useState<any | null>(null);
   const [savingLead, setSavingLead] = useState(false);
 
+  // Invoice Management State
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [creatingInvoice, setCreatingInvoice] = useState(false);
-  const [newInvoice, setNewInvoice] = useState({ project_id: '', client_id: '', amount: '', due_date: '', description: '' });
+  const [newInvoice, setNewInvoice] = useState({ 
+    project_id: '', 
+    client_id: '', 
+    amount: '', 
+    due_date: '', 
+    description: '', 
+    remarks: '' 
+  });
+  const [editingInvoice, setEditingInvoice] = useState<any | null>(null);
+  const [updatingInvoice, setUpdatingInvoice] = useState(false);
   const [convertingId, setConvertingId] = useState<number | null>(null);
 
   const router = useRouter();
 
-  // Role Checker Flags
   const isSuperAdmin = currentUserProfile?.role === 'admin' || currentUserProfile?.role === 'director';
   const isManager = currentUserProfile?.role === 'manager';
 
@@ -114,7 +137,6 @@ export default function WorkspaceOverviewDashboard() {
         .eq('id', user.id)
         .single();
 
-      // Manager, Admin, and Director are authorized to operate this console
       const allowedRoles = ['admin', 'director', 'manager'];
       if (!allowedRoles.includes(profile?.role)) {
         router.push('/dashboard/employee');
@@ -125,8 +147,9 @@ export default function WorkspaceOverviewDashboard() {
       const { data: projData } = await supabase.from('projects').select('*').order('created_at', { ascending: false });
       const { data: inqData } = await supabase.from('inquiries').select('*').order('created_at', { ascending: false });
       const { data: empData } = await supabase.from('profiles').select('*').neq('role', 'client').order('full_name', { ascending: true });
-      const { data: clientData } = await supabase.from('profiles').select('*').eq('role', 'client').order('created_at', { ascending: true });
+      const { data: clientData } = await supabase.from('profiles').select('*').eq('role', 'client').order('created_at', { ascending: false });
       const { data: invData } = await supabase.from('project_invoices').select('*').order('created_at', { ascending: false });
+      const { data: taskData } = await supabase.from('project_tasks').select('*').order('created_at', { ascending: false });
 
       // Safe fetch for project_time_logs
       const { data: timeLogsData } = await supabase.from('project_time_logs').select('*');
@@ -148,6 +171,7 @@ export default function WorkspaceOverviewDashboard() {
       if (empData) setEmployees(empData);
       if (clientData) setClients(clientData);
       if (invData) setInvoices(invData);
+      if (taskData) setAllTasks(taskData);
     } catch (err) {
       console.error('Error loading operations workspace:', err);
     } finally {
@@ -159,30 +183,64 @@ export default function WorkspaceOverviewDashboard() {
     loadData();
   }, [loadData]);
 
-  // Persist availability_status to Supabase profiles
+  // Date Filter Logic for Tasks
+  const filterTaskByDate = useCallback((taskDateStr: string | null) => {
+    if (!taskDateStr || taskDateFilter === 'all') return true;
+
+    const taskDate = new Date(taskDateStr);
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    if (taskDateFilter === 'yesterday') {
+      const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
+      return taskDate >= startOfYesterday && taskDate < startOfToday;
+    }
+    if (taskDateFilter === 'week') {
+      const past7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      return taskDate >= past7Days;
+    }
+    if (taskDateFilter === '15days') {
+      const past15Days = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
+      return taskDate >= past15Days;
+    }
+    if (taskDateFilter === 'month') {
+      const past30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      return taskDate >= past30Days;
+    }
+    return true;
+  }, [taskDateFilter]);
+
+  const toggleProjectTasksExpand = (projectId: string | number) => {
+    setExpandedTasksProject((prev) => ({
+      ...prev,
+      [projectId]: !prev[projectId],
+    }));
+  };
+
   const handleUpdateAvailability = async (empId: string, status: 'available' | 'busy' | 'on_leave') => {
-    // 1. Optimistic UI update
     setEmployees((prev) => prev.map((e) => (e.id === empId ? { ...e, availability_status: status } : e)));
 
-    // 2. Persist update in Supabase
     const { error } = await supabase
       .from('profiles')
       .update({ availability_status: status })
       .eq('id', empId);
 
     if (error) {
-      console.error('Availability update failed:', error);
-      alert('Failed to update status in database: ' + error.message);
-      loadData(); // Revert back on error
+      alert('Failed to update status: ' + error.message);
+      loadData();
     }
   };
 
   const handleSaveEmployeeDetails = async () => {
     if (!editingEmployee) return;
 
-    // Strict guard: Only admin can modify system roles
+    const cleanedUsername = editingEmployee.username 
+      ? editingEmployee.username.trim().toLowerCase().replace(/\s+/g, '_').replace(/@/g, '')
+      : null;
+
     const updatePayload: any = {
       full_name: editingEmployee.full_name,
+      username: cleanedUsername,
       employee_code: editingEmployee.employee_code || null,
       phone: editingEmployee.phone || null,
       availability_status: editingEmployee.availability_status || 'available',
@@ -199,6 +257,7 @@ export default function WorkspaceOverviewDashboard() {
 
     if (!error) {
       setEmployees((prev) => prev.map((e) => (e.id === editingEmployee.id ? { ...e, ...updatePayload } : e)));
+      setClients((prev) => prev.map((c) => (c.id === editingEmployee.id ? { ...c, ...updatePayload } : c)));
       setEditingEmployee(null);
     } else {
       alert('Error updating profile: ' + error.message);
@@ -214,6 +273,7 @@ export default function WorkspaceOverviewDashboard() {
     const { error } = await supabase.from('profiles').delete().eq('id', empId);
     if (!error) {
       setEmployees((prev) => prev.filter((e) => e.id !== empId));
+      setClients((prev) => prev.filter((c) => c.id !== empId));
     } else {
       alert('Error removing user: ' + error.message);
     }
@@ -227,15 +287,16 @@ export default function WorkspaceOverviewDashboard() {
     }
     setCreatingUser(true);
     try {
+      const cleanedUsername = newUser.username.trim().toLowerCase().replace(/\s+/g, '_').replace(/@/g, '');
       const res = await fetch('/api/admin/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newUser),
+        body: JSON.stringify({ ...newUser, username: cleanedUsername }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create user');
       setShowUserModal(false);
-      setNewUser({ fullName: '', email: '', password: '', role: 'employee', employeeCode: '', phone: '' });
+      setNewUser({ fullName: '', username: '', email: '', password: '', role: 'employee', employeeCode: '', phone: '' });
       loadData();
     } catch (err: any) {
       alert(err.message);
@@ -303,7 +364,7 @@ export default function WorkspaceOverviewDashboard() {
 
   const handleDeleteProject = async (projectId: string | number) => {
     if (!isSuperAdmin) {
-      alert('Notice: Only Admin can delete a project permanently. Managers can archive instead.');
+      alert('Notice: Only Admin can delete a project permanently.');
       return;
     }
     if (!confirm('Are you sure you want to delete this project?')) return;
@@ -387,18 +448,43 @@ export default function WorkspaceOverviewDashboard() {
         currency: 'INR',
         due_date: newInvoice.due_date || null,
         description: newInvoice.description || 'Milestone Deliverable Fee',
+        remarks: newInvoice.remarks?.trim() || null,
         status: 'Unpaid',
       },
     ]);
 
     if (!error) {
       setShowInvoiceModal(false);
-      setNewInvoice({ project_id: '', client_id: '', amount: '', due_date: '', description: '' });
+      setNewInvoice({ project_id: '', client_id: '', amount: '', due_date: '', description: '', remarks: '' });
       loadData();
     } else {
       alert('Error creating invoice: ' + error.message);
     }
     setCreatingInvoice(false);
+  };
+
+  const handleUpdateInvoice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isSuperAdmin || !editingInvoice) return;
+    setUpdatingInvoice(true);
+
+    const { error } = await supabase
+      .from('project_invoices')
+      .update({
+        amount: Number(editingInvoice.amount),
+        due_date: editingInvoice.due_date || null,
+        description: editingInvoice.description || null,
+        remarks: editingInvoice.remarks?.trim() || null,
+      })
+      .eq('id', editingInvoice.id);
+
+    setUpdatingInvoice(false);
+    if (!error) {
+      setEditingInvoice(null);
+      loadData();
+    } else {
+      alert('Error updating invoice: ' + error.message);
+    }
   };
 
   const handleToggleInvoiceStatus = async (invId: number, currentStatus: string) => {
@@ -417,6 +503,18 @@ export default function WorkspaceOverviewDashboard() {
   const filteredProjects = selectedProjectId === 'all'
     ? projects
     : projects.filter((p) => String(p.id) === String(selectedProjectId));
+
+  const filteredClients = useMemo(() => {
+    return clients.filter((c) => {
+      const q = clientSearch.toLowerCase();
+      return (
+        c.full_name?.toLowerCase().includes(q) ||
+        c.email?.toLowerCase().includes(q) ||
+        c.phone?.toLowerCase().includes(q) ||
+        c.username?.toLowerCase().includes(q)
+      );
+    });
+  }, [clients, clientSearch]);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans antialiased selection:bg-[#C8FF91] selection:text-black">
@@ -453,7 +551,6 @@ export default function WorkspaceOverviewDashboard() {
               <span className="hidden sm:inline">AI Copilot</span>
             </button>
 
-            {/* Both Manager & Admin can create projects */}
             <button
               onClick={() => setShowProjectModal(true)}
               className="px-2.5 py-1.5 rounded-lg text-[11px] sm:text-xs font-bold text-white bg-black hover:bg-slate-800 transition-colors flex items-center gap-1 cursor-pointer"
@@ -462,7 +559,6 @@ export default function WorkspaceOverviewDashboard() {
               <span>Project</span>
             </button>
 
-            {/* Provision User is restricted exclusively to Super Admin */}
             {isSuperAdmin && (
               <button
                 onClick={() => setShowUserModal(true)}
@@ -482,11 +578,12 @@ export default function WorkspaceOverviewDashboard() {
           </div>
         </div>
 
-        {/* 5 Navigation Tabs */}
+        {/* 6 Navigation Tabs (Includes Newly Added Clients Tab) */}
         <div className="max-w-7xl mx-auto px-3 sm:px-6 flex gap-2 border-t border-slate-100 overflow-x-auto [&::-webkit-scrollbar]:hidden">
           {[
             { id: 'projects', label: 'Projects', icon: FolderKanban, count: projects.length },
-            { id: 'team', label: 'Team', icon: Users, count: employees.length },
+            { id: 'team', label: 'Employees', icon: Users, count: employees.length },
+            { id: 'clients', label: 'Clients', icon: UserCheck, count: clients.length },
             { id: 'crm', label: 'Pipeline', icon: UsersRound, count: inquiries.length },
             { id: 'finance', label: 'Ledger', icon: CreditCard, count: `₹${(paidRevenue / 1000).toFixed(0)}k` },
             { id: 'slack', label: 'Slack', icon: MessageSquare, count: 'Live' },
@@ -521,12 +618,12 @@ export default function WorkspaceOverviewDashboard() {
           <div className="py-20 text-center text-xs text-slate-400 font-mono">Loading operations...</div>
         ) : (
           <>
-            {/* TAB 1: PROJECTS */}
+            {/* TAB 1: PROJECTS & TASKS (WITH 5-TASK LIMIT & DATE FILTER) */}
             {activeTab === 'projects' && (
               <div className="space-y-4 sm:space-y-6">
                 <AdminVerificationQueue />
 
-                {/* Project Selection Dropdown */}
+                {/* Filter Bar with Date Range Selector */}
                 <div className="bg-white border border-slate-200 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 shadow-2xs">
                   <div className="flex items-center gap-2 flex-1 min-w-60">
                     <Filter size={14} className="text-slate-400 shrink-0" />
@@ -544,15 +641,28 @@ export default function WorkspaceOverviewDashboard() {
                       ))}
                     </select>
                   </div>
+
+                  {/* Task Date Range Filter (Yesterday, Last Week, 15 Days, Last Month) */}
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-400 font-mono">
-                      Showing {filteredProjects.length} of {projects.length}
-                    </span>
+                    <Calendar size={13} className="text-slate-400 shrink-0" />
+                    <label className="text-xs font-bold text-slate-700 whitespace-nowrap">Tasks Period:</label>
+                    <select
+                      value={taskDateFilter}
+                      onChange={(e) => setTaskDateFilter(e.target.value as any)}
+                      className="text-xs border border-slate-200 rounded-lg p-1.5 font-bold bg-white text-slate-800 outline-none focus:border-black cursor-pointer"
+                    >
+                      <option value="all">All Time</option>
+                      <option value="yesterday">Yesterday</option>
+                      <option value="week">Last Week (7 Days)</option>
+                      <option value="15days">Last 15 Days</option>
+                      <option value="month">Last Month (30 Days)</option>
+                    </select>
+
                     <button
                       onClick={() => setShowProjectModal(true)}
                       className="px-2.5 py-1.5 bg-black text-white rounded-lg text-xs font-bold cursor-pointer"
                     >
-                      + New
+                      + New Project
                     </button>
                   </div>
                 </div>
@@ -562,14 +672,26 @@ export default function WorkspaceOverviewDashboard() {
                     No matching project found.
                   </div>
                 ) : (
-                  <div className="space-y-3 sm:space-y-4">
+                  <div className="space-y-4">
                     {filteredProjects.map((proj) => {
                       const assignedClient = clients.find((c) => c.id === proj.client_id);
                       const assignedEmp = employees.find((e) => e.id === proj.assigned_to);
                       const currentTab = activeProjectTab[proj.id] || 'kanban';
 
+                      // Project specific tasks filtered by the chosen date range
+                      const projectTasks = allTasks.filter((t) => {
+                        const belongsToProj = String(t.project_id) === String(proj.id);
+                        if (!belongsToProj) return false;
+                        const relevantDate = t.updated_at || t.created_at;
+                        return filterTaskByDate(relevantDate);
+                      });
+
+                      const isExpanded = expandedTasksProject[proj.id] || false;
+                      const visibleTasks = isExpanded ? projectTasks : projectTasks.slice(0, 5);
+                      const hasMoreTasks = projectTasks.length > 5;
+
                       return (
-                        <div key={proj.id} className="bg-white border border-slate-200 rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3 sm:space-y-4">
+                        <div key={proj.id} className="bg-white border border-slate-200 rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4">
                           <div className="flex flex-wrap items-start justify-between gap-2">
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">
@@ -582,9 +704,9 @@ export default function WorkspaceOverviewDashboard() {
                                 </span>
                               </div>
                               <div className="text-[11px] text-slate-500 mt-1 flex flex-wrap gap-x-2 gap-y-0.5">
-                                <span>Client: <strong>{assignedClient?.full_name?.split(' ')[0] || 'Unassigned'}</strong></span>
+                                <span>Client: <strong>{assignedClient?.full_name || assignedClient?.email || 'Unassigned'}</strong></span>
                                 <span>•</span>
-                                <span>Owner: <strong>{assignedEmp?.full_name?.split(' ')[0] || 'Unassigned'}</strong></span>
+                                <span>Owner: <strong>{assignedEmp?.full_name || 'Unassigned'}</strong></span>
                               </div>
                             </div>
 
@@ -595,7 +717,6 @@ export default function WorkspaceOverviewDashboard() {
                               >
                                 Edit
                               </button>
-                              {/* Only Super Admin can completely delete a project */}
                               {isSuperAdmin && (
                                 <button
                                   onClick={() => handleDeleteProject(proj.id)}
@@ -607,6 +728,7 @@ export default function WorkspaceOverviewDashboard() {
                             </div>
                           </div>
 
+                          {/* Progress */}
                           <div className="space-y-1">
                             <div className="flex justify-between text-[11px] font-mono text-slate-500">
                               <span>Sprint Progress</span>
@@ -617,10 +739,73 @@ export default function WorkspaceOverviewDashboard() {
                             </div>
                           </div>
 
+                          {/* Quick Task Summary Panel (5-Task Limit + Dropdown) */}
+                          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                                <span>📌 Project Tasks ({projectTasks.length})</span>
+                                {taskDateFilter !== 'all' && (
+                                  <span className="text-[9px] font-mono bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded font-bold uppercase">
+                                    {taskDateFilter}
+                                  </span>
+                                )}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                Showing {visibleTasks.length} of {projectTasks.length}
+                              </span>
+                            </div>
+
+                            {projectTasks.length === 0 ? (
+                              <p className="text-xs text-slate-400 italic py-1">No tasks recorded for this selected time filter.</p>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {visibleTasks.map((t) => (
+                                  <div key={t.id} className="p-2 bg-white border border-slate-200 rounded-lg flex items-center justify-between gap-2 text-xs">
+                                    <div className="flex items-center gap-2 truncate">
+                                      {t.is_completed ? (
+                                        <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                                      ) : (
+                                        <Clock size={14} className="text-amber-500 shrink-0" />
+                                      )}
+                                      <span className={`truncate ${t.is_completed ? 'line-through text-slate-400' : 'text-slate-800 font-medium'}`}>
+                                        {t.title}
+                                      </span>
+                                    </div>
+                                    <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 shrink-0">
+                                      {t.status}
+                                    </span>
+                                  </div>
+                                ))}
+
+                                {/* Explore All Tasks Dropdown Trigger */}
+                                {hasMoreTasks && (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleProjectTasksExpand(proj.id)}
+                                    className="w-full py-1.5 mt-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 flex items-center justify-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                  >
+                                    {isExpanded ? (
+                                      <>
+                                        <span>Collapse tasks list</span>
+                                        <ChevronUp size={14} />
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span>Explore all remaining {projectTasks.length - 5} tasks</span>
+                                        <ChevronDown size={14} />
+                                      </>
+                                    )}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Navigation sub-tabs inside project */}
                           <div className="border-t border-slate-100 pt-3 space-y-3">
                             <div className="flex gap-1 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden">
                               {[
-                                { key: 'kanban', label: '📌 Tasks' },
+                                { key: 'kanban', label: '📌 Kanban' },
                                 { key: 'files', label: '📁 Files' },
                                 { key: 'brief', label: '📋 Brief' },
                                 { key: 'versions', label: '🎨 Versions' },
@@ -631,9 +816,7 @@ export default function WorkspaceOverviewDashboard() {
                                   key={t.key}
                                   onClick={() => setActiveProjectTab({ ...activeProjectTab, [proj.id]: t.key })}
                                   className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap cursor-pointer transition-colors ${
-                                    currentTab === t.key
-                                      ? 'bg-black text-white'
-                                      : 'bg-slate-100 text-slate-600'
+                                    currentTab === t.key ? 'bg-black text-white' : 'bg-slate-100 text-slate-600'
                                   }`}
                                 >
                                   {t.label}
@@ -669,20 +852,20 @@ export default function WorkspaceOverviewDashboard() {
               </div>
             )}
 
-            {/* TAB 2: TEAM */}
+            {/* TAB 2: TEAM (EMPLOYEES) */}
             {activeTab === 'team' && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-xs sm:text-sm font-bold text-slate-900">Team Directory & Unique IDs</h2>
-                    <p className="text-[11px] text-slate-500">Live member status & role allocation</p>
+                    <h2 className="text-xs sm:text-sm font-bold text-slate-900">Employees Directory</h2>
+                    <p className="text-[11px] text-slate-500">Live operational personnel, status, and IDs</p>
                   </div>
                   {isSuperAdmin && (
                     <button
                       onClick={() => setShowUserModal(true)}
                       className="px-2.5 py-1.5 bg-black text-white rounded-lg text-xs font-bold cursor-pointer"
                     >
-                      + Provision User
+                      + Provision Employee
                     </button>
                   )}
                 </div>
@@ -702,8 +885,13 @@ export default function WorkspaceOverviewDashboard() {
                                 <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-900 text-white font-bold">
                                   {emp.employee_code || `EMP-${emp.id.slice(0, 4).toUpperCase()}`}
                                 </span>
+                                {emp.username && (
+                                  <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-sky-50 text-sky-700 font-bold border border-sky-200">
+                                    @{emp.username}
+                                  </span>
+                                )}
                               </div>
-                              <p className="text-[10px] text-slate-400 truncate">{emp.email}</p>
+                              <p className="text-[10px] text-slate-400 truncate mt-0.5">{emp.email}</p>
                               {emp.phone && (
                                 <p className="text-[10px] text-slate-500 font-mono mt-0.5">{emp.phone}</p>
                               )}
@@ -737,7 +925,6 @@ export default function WorkspaceOverviewDashboard() {
                             >
                               <Edit3 size={13} />
                             </button>
-                            {/* Deletion button only visible to super admin */}
                             {isSuperAdmin && (
                               <button
                                 onClick={() => handleDeleteEmployee(emp.id)}
@@ -756,7 +943,111 @@ export default function WorkspaceOverviewDashboard() {
               </div>
             )}
 
-            {/* TAB 3: CRM / PIPELINE */}
+            {/* TAB 3: CLIENTS DIRECTORY (Newly Added to resolve "can't see the clients") */}
+            {activeTab === 'clients' && (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-xs sm:text-sm font-bold text-slate-900">Clients Directory</h2>
+                    <p className="text-[11px] text-slate-500">All registered client accounts and their ongoing projects</p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <Search size={13} className="absolute left-2.5 top-2.5 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search clients..."
+                        value={clientSearch}
+                        onChange={(e) => setClientSearch(e.target.value)}
+                        className="pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs outline-none focus:border-black"
+                      />
+                    </div>
+                    {isSuperAdmin && (
+                      <button
+                        onClick={() => {
+                          setNewUser({ ...newUser, role: 'client' });
+                          setShowUserModal(true);
+                        }}
+                        className="px-2.5 py-1.5 bg-black text-white rounded-lg text-xs font-bold cursor-pointer"
+                      >
+                        + Add Client
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {filteredClients.length === 0 ? (
+                  <div className="bg-white border border-dashed border-slate-200 rounded-xl p-8 text-center text-xs text-slate-400">
+                    No clients found. Click "+ Add Client" or convert a lead from the Pipeline.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {filteredClients.map((client) => {
+                      const clientProjects = projects.filter((p) => p.client_id === client.id);
+                      const clientInvoices = invoices.filter((inv) => inv.client_id === client.id);
+                      const totalBilled = clientInvoices.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
+
+                      return (
+                        <div key={client.id} className="bg-white border border-slate-200 rounded-xl p-4 space-y-3 shadow-2xs flex flex-col justify-between">
+                          <div className="space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <h4 className="text-xs font-bold text-slate-900 truncate">
+                                    {client.full_name || 'Client Account'}
+                                  </h4>
+                                  <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold uppercase">
+                                    Client
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-slate-500 font-mono mt-0.5 truncate">{client.email}</p>
+                                {client.phone && (
+                                  <p className="text-[10px] text-slate-400 font-mono">{client.phone}</p>
+                                )}
+                              </div>
+
+                              <button
+                                onClick={() => setEditingEmployee(client)}
+                                className="p-1 hover:bg-slate-100 rounded text-slate-600 cursor-pointer"
+                                title="Edit Client"
+                              >
+                                <Edit3 size={13} />
+                              </button>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-center">
+                              <div className="p-2 bg-slate-50 rounded-lg">
+                                <span className="text-[9px] text-slate-400 uppercase font-bold block">Projects</span>
+                                <span className="text-xs font-bold text-slate-900 mt-0.5 block">{clientProjects.length}</span>
+                              </div>
+                              <div className="p-2 bg-slate-50 rounded-lg">
+                                <span className="text-[9px] text-slate-400 uppercase font-bold block">Invoiced</span>
+                                <span className="text-xs font-bold text-emerald-700 mt-0.5 block">₹{totalBilled.toLocaleString()}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
+                            <span>UID: #{client.id.slice(0, 6)}</span>
+                            {isSuperAdmin && (
+                              <button
+                                onClick={() => handleDeleteEmployee(client.id)}
+                                className="text-rose-500 hover:underline cursor-pointer"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 4: CRM / PIPELINE */}
             {activeTab === 'crm' && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
@@ -815,14 +1106,14 @@ export default function WorkspaceOverviewDashboard() {
               </div>
             )}
 
-            {/* TAB 4: FINANCE */}
+            {/* TAB 5: FINANCE (LEDGER WITH INVOICE EDIT & REMARKS) */}
             {activeTab === 'finance' && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-xs sm:text-sm font-bold text-slate-900">Financial Ledger</h2>
                     {!isSuperAdmin && (
-                      <p className="text-[11px] text-amber-700">Financial issuance is restricted to Super Admin.</p>
+                      <p className="text-[11px] text-amber-700">Financial issuance and edits are restricted to Super Admin.</p>
                     )}
                   </div>
                   {isSuperAdmin && (
@@ -856,30 +1147,54 @@ export default function WorkspaceOverviewDashboard() {
                     <p className="text-xs text-slate-400 italic text-center py-3">No invoices yet.</p>
                   ) : (
                     invoices.map((inv) => (
-                      <div key={inv.id} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between text-xs gap-2">
-                        <div className="min-w-0">
+                      <div key={inv.id} className="p-3 rounded-lg bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between text-xs gap-2">
+                        <div className="min-w-0 max-w-md">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-bold text-slate-900">{inv.invoice_number}</span>
                             <span className="font-bold text-emerald-700">₹{Number(inv.amount).toLocaleString()}</span>
+                            {inv.due_date && (
+                              <span className="text-[10px] text-slate-400 font-mono">Due: {inv.due_date}</span>
+                            )}
                           </div>
-                          <p className="text-[10px] text-slate-500 truncate">{inv.description || 'Milestone'}</p>
+                          <p className="text-[10px] text-slate-500 truncate mt-0.5">{inv.description || 'Milestone Deliverable'}</p>
+                          
+                          {inv.remarks && (
+                            <div className="mt-1 flex items-start gap-1 text-[10px] text-amber-800 bg-amber-50/80 px-2 py-0.5 rounded border border-amber-200">
+                              <FileText size={11} className="shrink-0 mt-0.5 text-amber-600" />
+                              <span className="wrap-break-word"><strong>Remark:</strong> {inv.remarks}</span>
+                            </div>
+                          )}
                         </div>
-                        {isSuperAdmin ? (
-                          <button
-                            onClick={() => handleToggleInvoiceStatus(inv.id, inv.status)}
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold border shrink-0 cursor-pointer ${
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {isSuperAdmin && (
+                            <button
+                              onClick={() => setEditingInvoice(inv)}
+                              className="px-2 py-1 rounded-md text-[10px] font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 cursor-pointer"
+                              title="Edit Invoice & Remarks"
+                            >
+                              <Edit3 size={11} className="inline mr-1" />
+                              Edit
+                            </button>
+                          )}
+
+                          {isSuperAdmin ? (
+                            <button
+                              onClick={() => handleToggleInvoiceStatus(inv.id, inv.status)}
+                              className={`px-2 py-1 rounded text-[10px] font-bold border cursor-pointer ${
+                                inv.status === 'Paid' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-50 text-amber-800 border-amber-300'
+                              }`}
+                            >
+                              {inv.status === 'Paid' ? '✓ Paid' : 'Mark Paid'}
+                            </button>
+                          ) : (
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
                               inv.status === 'Paid' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-50 text-amber-800 border-amber-300'
-                            }`}
-                          >
-                            {inv.status === 'Paid' ? '✓ Paid' : 'Mark Paid'}
-                          </button>
-                        ) : (
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border shrink-0 ${
-                            inv.status === 'Paid' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-amber-50 text-amber-800 border-amber-300'
-                          }`}>
-                            {inv.status}
-                          </span>
-                        )}
+                            }`}>
+                              {inv.status}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     ))
                   )}
@@ -887,7 +1202,7 @@ export default function WorkspaceOverviewDashboard() {
               </div>
             )}
 
-            {/* TAB 5: SLACK LIVE CHAT */}
+            {/* TAB 6: SLACK LIVE CHAT */}
             {activeTab === 'slack' && currentUserId && (
               <div className="space-y-3">
                 <SlackWorkspaceChat
@@ -987,11 +1302,11 @@ export default function WorkspaceOverviewDashboard() {
         </div>
       )}
 
-      {/* EMPLOYEE EDIT MODAL */}
+      {/* EMPLOYEE / CLIENT EDIT MODAL */}
       {editingEmployee && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
           <div className="bg-white border border-slate-200 rounded-xl p-5 max-w-sm w-full space-y-3 shadow-xl">
-            <h3 className="text-xs font-bold text-slate-900 uppercase">Edit Employee Profile</h3>
+            <h3 className="text-xs font-bold text-slate-900 uppercase">Edit User Profile</h3>
             <div className="space-y-2.5">
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Full Name</label>
@@ -1002,8 +1317,23 @@ export default function WorkspaceOverviewDashboard() {
                   className="w-full text-xs border rounded-lg p-2"
                 />
               </div>
+
               <div>
-                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Employee Unique ID</label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Tagging Username (@handle)</label>
+                <div className="relative">
+                  <span className="absolute left-2.5 top-2 text-xs font-mono font-bold text-slate-400">@</span>
+                  <input
+                    type="text"
+                    placeholder="username (e.g. shanya_tripathi)"
+                    value={editingEmployee.username || ''}
+                    onChange={(e) => setEditingEmployee({ ...editingEmployee, username: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
+                    className="w-full text-xs border rounded-lg p-2 pl-6 font-mono font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Unique ID</label>
                 <input
                   type="text"
                   placeholder="e.g. ASK-EMP01"
@@ -1012,6 +1342,7 @@ export default function WorkspaceOverviewDashboard() {
                   className="w-full text-xs border rounded-lg p-2 font-mono font-bold"
                 />
               </div>
+
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Phone Number</label>
                 <input
@@ -1022,7 +1353,7 @@ export default function WorkspaceOverviewDashboard() {
                   className="w-full text-xs border rounded-lg p-2 font-mono"
                 />
               </div>
-              {/* Only Super Admin can change Roles */}
+
               {isSuperAdmin ? (
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">System Role</label>
@@ -1034,6 +1365,7 @@ export default function WorkspaceOverviewDashboard() {
                     <option value="employee">Employee</option>
                     <option value="manager">Manager</option>
                     <option value="intern">Intern</option>
+                    <option value="client">Client</option>
                     <option value="admin">Admin</option>
                   </select>
                 </div>
@@ -1043,6 +1375,7 @@ export default function WorkspaceOverviewDashboard() {
                   <p className="text-xs font-semibold text-slate-700 uppercase bg-slate-50 p-2 rounded">{editingEmployee.role}</p>
                 </div>
               )}
+
               <div className="flex gap-2 pt-2">
                 <button 
                   type="button" 
@@ -1064,7 +1397,7 @@ export default function WorkspaceOverviewDashboard() {
         </div>
       )}
 
-      {/* USER PROVISION MODAL (Strictly Super Admin) */}
+      {/* USER PROVISION MODAL (EMPLOYEE OR CLIENT) */}
       {showUserModal && isSuperAdmin && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
           <div className="bg-white border border-slate-200 rounded-xl p-5 w-full max-w-sm shadow-xl space-y-3">
@@ -1077,6 +1410,13 @@ export default function WorkspaceOverviewDashboard() {
                 value={newUser.fullName}
                 onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
                 className="w-full text-xs border rounded-lg p-2"
+              />
+              <input
+                type="text"
+                placeholder="@username for tagging (e.g. shanya_tripathi)"
+                value={newUser.username}
+                onChange={(e) => setNewUser({ ...newUser, username: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
+                className="w-full text-xs border rounded-lg p-2 font-mono"
               />
               <input
                 type="text"
@@ -1114,9 +1454,9 @@ export default function WorkspaceOverviewDashboard() {
                 className="w-full text-xs border rounded-lg p-2 cursor-pointer font-bold"
               >
                 <option value="employee">Employee</option>
+                <option value="client">Client</option>
                 <option value="manager">Manager</option>
                 <option value="intern">Intern</option>
-                <option value="client">Client</option>
                 <option value="admin">Admin</option>
               </select>
               <div className="flex gap-2 pt-1">
@@ -1130,7 +1470,7 @@ export default function WorkspaceOverviewDashboard() {
         </div>
       )}
 
-      {/* PROJECT MODAL */}
+      {/* PROJECT CREATION MODAL */}
       {showProjectModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
           <div className="bg-white border border-slate-200 rounded-xl p-5 w-full max-w-sm shadow-xl space-y-3">
@@ -1175,7 +1515,7 @@ export default function WorkspaceOverviewDashboard() {
         </div>
       )}
 
-      {/* INVOICE MODAL (Strictly Super Admin) */}
+      {/* CREATE INVOICE MODAL */}
       {showInvoiceModal && isSuperAdmin && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
           <div className="bg-white border border-slate-200 rounded-xl p-5 w-full max-w-sm shadow-xl space-y-3">
@@ -1200,10 +1540,95 @@ export default function WorkspaceOverviewDashboard() {
                 onChange={(e) => setNewInvoice({ ...newInvoice, amount: e.target.value })}
                 className="w-full text-xs border rounded-lg p-2"
               />
+              <input
+                type="date"
+                value={newInvoice.due_date}
+                onChange={(e) => setNewInvoice({ ...newInvoice, due_date: e.target.value })}
+                className="w-full text-xs border rounded-lg p-2 cursor-pointer"
+              />
+              <input
+                type="text"
+                placeholder="Milestone / Description"
+                value={newInvoice.description}
+                onChange={(e) => setNewInvoice({ ...newInvoice, description: e.target.value })}
+                className="w-full text-xs border rounded-lg p-2"
+              />
+              <textarea
+                rows={2}
+                placeholder="Remarks / Terms / Notes (e.g. 50% advance deliverable)..."
+                value={newInvoice.remarks}
+                onChange={(e) => setNewInvoice({ ...newInvoice, remarks: e.target.value })}
+                className="w-full text-xs border rounded-lg p-2"
+              />
               <div className="flex gap-2 pt-1">
                 <button type="button" onClick={() => setShowInvoiceModal(false)} className="flex-1 py-1.5 bg-slate-100 rounded-lg text-xs cursor-pointer">Cancel</button>
                 <button type="submit" disabled={creatingInvoice} className="flex-1 py-1.5 bg-black text-white text-xs font-bold rounded-lg cursor-pointer">
                   {creatingInvoice ? '...' : 'Issue'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT INVOICE MODAL */}
+      {editingInvoice && isSuperAdmin && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3">
+          <div className="bg-white border border-slate-200 rounded-xl p-5 w-full max-w-sm shadow-xl space-y-3">
+            <h3 className="text-xs font-bold text-slate-900 uppercase">Edit Invoice & Remarks</h3>
+            <form onSubmit={handleUpdateInvoice} className="space-y-2.5">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Invoice Amount (INR) *</label>
+                <input
+                  type="number"
+                  required
+                  value={editingInvoice.amount || ''}
+                  onChange={(e) => setEditingInvoice({ ...editingInvoice, amount: e.target.value })}
+                  className="w-full text-xs border rounded-lg p-2"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Due Date</label>
+                <input
+                  type="date"
+                  value={editingInvoice.due_date || ''}
+                  onChange={(e) => setEditingInvoice({ ...editingInvoice, due_date: e.target.value })}
+                  className="w-full text-xs border rounded-lg p-2 cursor-pointer"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Description</label>
+                <input
+                  type="text"
+                  value={editingInvoice.description || ''}
+                  onChange={(e) => setEditingInvoice({ ...editingInvoice, description: e.target.value })}
+                  className="w-full text-xs border rounded-lg p-2"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Remarks Section</label>
+                <textarea
+                  rows={2}
+                  placeholder="Special instructions, payment terms, or remarks..."
+                  value={editingInvoice.remarks || ''}
+                  onChange={(e) => setEditingInvoice({ ...editingInvoice, remarks: e.target.value })}
+                  className="w-full text-xs border rounded-lg p-2"
+                />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button 
+                  type="button" 
+                  onClick={() => setEditingInvoice(null)} 
+                  className="flex-1 py-1.5 bg-slate-100 rounded-lg text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={updatingInvoice} 
+                  className="flex-1 py-1.5 bg-black text-white text-xs font-bold rounded-lg cursor-pointer"
+                >
+                  {updatingInvoice ? 'Saving...' : 'Update Invoice'}
                 </button>
               </div>
             </form>

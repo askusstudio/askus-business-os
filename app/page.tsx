@@ -37,7 +37,7 @@ export default function App() {
       <Footer />
       <FloatingCallButton />
 
-      {/* Floating AI Copilot Trigger matching Call Now Style */}
+      {/* Floating AI Copilot Trigger */}
       <div className="fixed bottom-24 right-6 z-40">
         <button
           type="button"

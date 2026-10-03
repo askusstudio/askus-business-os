@@ -30,10 +30,10 @@ export default function LoginPage() {
         return;
       }
 
-      // Check role from profiles table
+      // Check role & details from profiles table
       const { data: profile, error: profError } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, employee_code, full_name, username')
         .eq('id', data.user.id)
         .single();
 
@@ -44,12 +44,41 @@ export default function LoginPage() {
       }
 
       const role = profile.role?.toLowerCase() || '';
-
-      // Operational Workspace Roles (Manager & Super Admins)
       const isConsoleOperator = ['admin', 'director', 'manager', 'senior_manager'].includes(role);
       const isRegularEmployee = ['employee', 'intern', 'executive'].includes(role);
 
-      // Validate selection vs actual role & route accurately
+      // Auto-mark Daily Attendance on Successful Internal Member Login
+      if (isRegularEmployee || isConsoleOperator) {
+        const todayDate = new Date().toISOString().split('T')[0];
+
+        try {
+          // Count current pending/active tasks for this employee
+          const { count: pendingTaskCount } = await supabase
+            .from('project_tasks')
+            .select('id', { count: 'exact', head: true })
+            .eq('assigned_to', data.user.id)
+            .neq('status', 'Done');
+
+          // Upsert daily attendance record
+          await supabase
+            .from('employee_attendance')
+            .upsert(
+              {
+                user_id: data.user.id,
+                employee_code: profile.employee_code || null,
+                login_time: new Date().toISOString(),
+                active_tasks_count: pendingTaskCount || 0,
+                date: todayDate,
+                status: 'Present',
+              },
+              { onConflict: 'user_id,date' }
+            );
+        } catch (attErr) {
+          console.error('Attendance sync error:', attErr);
+        }
+      }
+
+      // Role & portal routing validation
       if (selectedType === 'admin') {
         if (!isConsoleOperator) {
           setErrorMsg('Access denied: Manager or Admin credentials required for Console.');
@@ -59,7 +88,6 @@ export default function LoginPage() {
         }
         router.push('/dashboard/admin');
       } else if (selectedType === 'employee') {
-        // If a Manager logs in via employee tab, route them directly to console operations
         if (role === 'manager' || role === 'senior_manager') {
           router.push('/dashboard/admin');
           return;
@@ -90,9 +118,9 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen w-full relative flex items-center justify-center p-4 bg-[#0B0F17] overflow-hidden selection:bg-emerald-500 selection:text-white">
       {/* Aesthetic Ambient Lighting */}
-      <div className="absolute -top-40 -left-40 w-[500px] h-[500px] bg-emerald-500/12 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute -bottom-40 -right-40 w-[500px] h-[500px] bg-violet-600/15 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-slate-900/60 rounded-full blur-[160px] pointer-events-none" />
+      <div className="absolute -top-40 -left-40 w-125 h-125 bg-emerald-500/12 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute -bottom-40 -right-40 w-125 h-125 bg-violet-600/15 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-175 h-175 bg-slate-900/60 rounded-full blur-[160px] pointer-events-none" />
 
       {/* Subtle Dot Matrix Texture */}
       <div
@@ -201,9 +229,9 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-2 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all duration-200 shadow-lg shadow-emerald-500/25 cursor-pointer disabled:opacity-50"
+            className="w-full mt-2 py-3 bg-linear-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-black text-xs uppercase tracking-wider rounded-xl transition-all duration-200 shadow-lg shadow-emerald-500/25 cursor-pointer disabled:opacity-50"
           >
-            {loading ? 'Authenticating...' : `Sign In as ${selectedType.toUpperCase()}`}
+            {loading ? 'Authenticating & Marking Attendance...' : `Sign In as ${selectedType.toUpperCase()}`}
           </button>
         </form>
 

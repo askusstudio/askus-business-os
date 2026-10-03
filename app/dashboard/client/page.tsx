@@ -14,7 +14,10 @@ import {
   Layers, 
   CheckCircle2, 
   Clock, 
-  ExternalLink 
+  ExternalLink,
+  QrCode,
+  X,
+  FileText
 } from 'lucide-react';
 
 export default function ClientDashboard() {
@@ -26,6 +29,12 @@ export default function ClientDashboard() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Client Payment Modal State
+  const [payingInvoice, setPayingInvoice] = useState<any | null>(null);
+  const [paymentRef, setPaymentRef] = useState('');
+  const [paymentSubmitting, setPaymentSubmitting] = useState(false);
+
   const router = useRouter();
 
   const loadData = useCallback(async () => {
@@ -130,6 +139,36 @@ export default function ClientDashboard() {
     }
   };
 
+  const handleConfirmPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!payingInvoice) return;
+    setPaymentSubmitting(true);
+
+    try {
+      const { error } = await supabase
+        .from('project_invoices')
+        .update({
+          payment_method: 'UPI',
+          transaction_ref: paymentRef.trim() || `UPI-TXN-${Date.now().toString().slice(-6)}`,
+          status: 'Processing',
+        })
+        .eq('id', payingInvoice.id);
+
+      if (!error) {
+        alert('Payment reference submitted! Verification in progress by AskUs Studio.');
+        setPayingInvoice(null);
+        setPaymentRef('');
+        loadData();
+      } else {
+        alert('Error recording payment: ' + error.message);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Payment submission failed');
+    } finally {
+      setPaymentSubmitting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans antialiased selection:bg-black selection:text-white">
       {announcements.length > 0 && (
@@ -155,7 +194,7 @@ export default function ClientDashboard() {
                   External
                 </span>
               </h1>
-              <p className="text-[10px] text-slate-400 hidden sm:block">Deliverables & Approvals</p>
+              <p className="text-[10px] text-slate-400 hidden sm:block">Deliverables, Invoices & Approvals</p>
             </div>
           </div>
 
@@ -236,7 +275,7 @@ export default function ClientDashboard() {
                     </div>
                   </div>
 
-                  {/* Sign-Off Action Card (Mobile Stacks) */}
+                  {/* Sign-Off Action Card */}
                   <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
                     <div>
                       <span className="text-[9px] font-bold text-slate-400 uppercase block">Milestone Status</span>
@@ -331,25 +370,54 @@ export default function ClientDashboard() {
                       <ProjectFileManager projectId={proj.id} userId={user.id} canUpload={true} />
                     )}
 
+                    {/* INVOICES WITH PAYMENT OPTION & REMARKS */}
                     {currentTab === 'invoices' && (
-                      <div className="space-y-2 pt-1">
+                      <div className="space-y-2.5 pt-1">
                         {projInvoices.length === 0 ? (
                           <p className="text-xs text-slate-400 italic text-center py-2">No invoices issued.</p>
                         ) : (
                           projInvoices.map((inv) => (
-                            <div key={inv.id} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between text-xs gap-2">
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-1.5">
+                            <div key={inv.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-wrap items-center justify-between text-xs gap-2">
+                              <div className="min-w-0 max-w-sm">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="font-bold text-slate-900">{inv.invoice_number}</span>
                                   <span className="font-bold text-emerald-700">₹{Number(inv.amount).toLocaleString()}</span>
+                                  {inv.due_date && (
+                                    <span className="text-[10px] text-slate-400 font-mono">Due: {inv.due_date}</span>
+                                  )}
                                 </div>
-                                <p className="text-[10px] text-slate-500 truncate">{inv.description || 'Milestone fee'}</p>
+                                <p className="text-[10px] text-slate-500 truncate mt-0.5">{inv.description || 'Milestone fee'}</p>
+
+                                {/* Remarks section */}
+                                {inv.remarks && (
+                                  <div className="mt-1 flex items-start gap-1 text-[10px] text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                                    <FileText size={11} className="shrink-0 mt-0.5 text-amber-600" />
+                                    <span><strong>Remarks:</strong> {inv.remarks}</span>
+                                  </div>
+                                )}
                               </div>
-                              <span className={`px-2 py-0.5 rounded text-[9px] font-bold border shrink-0 ${
-                                inv.status === 'Paid' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-amber-50 text-amber-800 border-amber-200'
-                              }`}>
-                                {inv.status}
-                              </span>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${
+                                  inv.status === 'Paid' 
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200' 
+                                    : inv.status === 'Processing'
+                                    ? 'bg-sky-50 text-sky-800 border-sky-200'
+                                    : 'bg-amber-50 text-amber-800 border-amber-200'
+                                }`}>
+                                  {inv.status}
+                                </span>
+
+                                {/* Pay Now Button if Unpaid */}
+                                {inv.status !== 'Paid' && (
+                                  <button
+                                    onClick={() => setPayingInvoice(inv)}
+                                    className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer transition-colors shadow-2xs"
+                                  >
+                                    💳 Pay Now
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           ))
                         )}
@@ -376,6 +444,83 @@ export default function ClientDashboard() {
           </div>
         )}
       </main>
+
+      {/* CLIENT INVOICE PAYMENT MODAL */}
+      {payingInvoice && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 max-w-sm w-full space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <div className="flex items-center gap-1.5">
+                <QrCode size={16} className="text-emerald-700" />
+                <h3 className="text-xs font-bold text-slate-900 uppercase">Settle Invoice Payment</h3>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setPayingInvoice(null)}
+                className="text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center space-y-1">
+              <span className="text-[10px] text-slate-500 uppercase font-semibold">Total Payable Amount</span>
+              <p className="text-xl font-black text-slate-900">₹{Number(payingInvoice.amount).toLocaleString()}</p>
+              <p className="text-[10px] font-mono text-slate-400">Invoice: {payingInvoice.invoice_number}</p>
+            </div>
+
+            {/* UPI QR Display Container */}
+            <div className="flex flex-col items-center justify-center p-3 bg-white border border-dashed border-slate-200 rounded-xl space-y-2">
+              <div className="w-32 h-32 bg-slate-100 rounded-lg flex items-center justify-center border border-slate-200 overflow-hidden p-1">
+                <img 
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=upi://pay?pa=askus@upi%26pn=Askus%20Studio%26am=${payingInvoice.amount}%26cu=INR`} 
+                  alt="Scan to Pay via UPI" 
+                  className="w-full h-full object-contain"
+                />
+              </div>
+              <p className="text-[10px] text-slate-500 text-center font-mono">
+                Scan with any UPI App (GPay, PhonePe, Paytm)
+              </p>
+              <span className="text-[10px] font-mono font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-700">
+                askus@upi
+              </span>
+            </div>
+
+            <form onSubmit={handleConfirmPayment} className="space-y-3">
+              <div>
+                <label className="text-[10px] font-bold text-slate-600 uppercase block mb-1">
+                  UPI UTR / Transaction Reference ID *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 4289XXXXXXXX"
+                  value={paymentRef}
+                  onChange={(e) => setPaymentRef(e.target.value)}
+                  className="w-full text-xs border border-slate-200 rounded-lg p-2 font-mono focus:outline-none focus:border-black"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setPayingInvoice(null)}
+                  className="flex-1 py-2 bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={paymentSubmitting}
+                  className="flex-1 py-2 bg-black text-white text-xs font-bold rounded-lg hover:bg-slate-800 disabled:opacity-50 cursor-pointer"
+                >
+                  {paymentSubmitting ? 'Verifying...' : 'Submit Reference'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -15,7 +15,12 @@ import {
   UploadCloud, 
   Image as ImageIcon, 
   X,
-  Hourglass
+  Hourglass,
+  UserCheck,
+  Edit3,
+  BadgeCheck,
+  Phone,
+  Sparkles
 } from 'lucide-react';
 
 export function calculateDuration(startedAt: string | null, completedAt: string | null) {
@@ -46,6 +51,17 @@ export default function EmployeeDashboard() {
   // Availability status state
   const [availability, setAvailability] = useState<'available' | 'busy' | 'on_leave'>('available');
   const [updatingAvailability, setUpdatingAvailability] = useState(false);
+
+  // Full Profile Update Modal State
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [updatingProfile, setUpdatingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    full_name: '',
+    username: '',
+    phone: '',
+    bio: '',
+    skills: '',
+  });
 
   // Shift Stopwatch State
   const [timerActive, setTimerActive] = useState<Record<string, boolean>>({});
@@ -147,6 +163,13 @@ export default function EmployeeDashboard() {
       }
       setProfile(prof);
       setAvailability(prof.availability_status || 'available');
+      setProfileForm({
+        full_name: prof.full_name || '',
+        username: prof.username || '',
+        phone: prof.phone || '',
+        bio: prof.bio || '',
+        skills: prof.skills || '',
+      });
 
       // Projects where user is owner / lead
       const { data: leadProjects } = await supabase
@@ -223,6 +246,35 @@ export default function EmployeeDashboard() {
     if (error) {
       alert('Error updating status: ' + error.message);
       setAvailability(profile?.availability_status || 'available');
+    }
+  };
+
+  // Full Employee Profile Update Handler
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    setUpdatingProfile(true);
+
+    const cleanedUsername = profileForm.username.trim().toLowerCase().replace(/\s+/g, '_').replace(/@/g, '');
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        full_name: profileForm.full_name.trim(),
+        username: cleanedUsername || null,
+        phone: profileForm.phone.trim() || null,
+        bio: profileForm.bio.trim() || null,
+        skills: profileForm.skills.trim() || null,
+      })
+      .eq('id', user.id);
+
+    setUpdatingProfile(false);
+    if (!error) {
+      alert('Profile details updated successfully!');
+      setShowProfileModal(false);
+      fetchEmployeeData();
+    } else {
+      alert('Failed to update profile: ' + error.message);
     }
   };
 
@@ -364,9 +416,19 @@ export default function EmployeeDashboard() {
                 <h1 className="text-xs sm:text-sm font-bold text-slate-900 uppercase truncate">
                   WORKSPACE
                 </h1>
-                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase shrink-0">
+                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 uppercase shrink-0 font-bold">
                   {profile?.role?.replace('_', ' ') || 'Team'}
                 </span>
+                {profile?.employee_code && (
+                  <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-900 text-white uppercase shrink-0 font-bold">
+                    {profile.employee_code}
+                  </span>
+                )}
+                {profile?.username && (
+                  <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-sky-50 text-sky-700 border border-sky-200 shrink-0 font-bold">
+                    @{profile.username}
+                  </span>
+                )}
               </div>
               <p className="text-[10px] text-slate-500 truncate">{profile?.full_name || 'Team Member'}</p>
             </div>
@@ -374,6 +436,15 @@ export default function EmployeeDashboard() {
 
           {/* Right Action Bar */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Edit Profile Button */}
+            <button
+              onClick={() => setShowProfileModal(true)}
+              className="px-2.5 py-1 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <Edit3 size={12} />
+              <span className="hidden sm:inline">Profile</span>
+            </button>
+
             <div className="relative">
               <select
                 value={availability}
@@ -550,7 +621,6 @@ export default function EmployeeDashboard() {
                                         <p className={`truncate text-xs ${t.is_completed ? 'line-through' : 'text-slate-800'}`}>
                                           {t.title || t.task_title}
                                         </p>
-                                        {/* Time duration badge if recorded */}
                                         {t.time_taken_minutes ? (
                                           <span className="inline-flex items-center gap-1 text-[9px] font-mono text-emerald-700 bg-emerald-50 px-1 rounded">
                                             <Hourglass size={9} /> {Math.floor(t.time_taken_minutes / 60)}h {t.time_taken_minutes % 60}m
@@ -697,6 +767,158 @@ export default function EmployeeDashboard() {
           </>
         )}
       </main>
+
+      {/* Ultra-Clean Enterprise Profile Modal */}
+      {showProfileModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white border border-slate-200/80 rounded-3xl max-w-lg w-full shadow-2xl shadow-slate-950/20 overflow-hidden transition-all">
+            
+            {/* Header Banner with Gradient & Brand Badge */}
+            <div className="relative h-24 bg-linear-to-r from-slate-900 via-slate-800 to-slate-900 px-6 pt-5">
+              <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px]" />
+              
+              <div className="relative flex items-center justify-between">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-[10px] font-mono font-bold tracking-wider text-emerald-300 uppercase">
+                  <BadgeCheck size={12} className="text-emerald-400" /> Verified Member
+                </span>
+
+                <button 
+                  type="button" 
+                  onClick={() => setShowProfileModal(false)}
+                  className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              {/* Floating Avatar Chip */}
+              <div className="absolute -bottom-7 left-6 flex items-end gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-black border-4 border-white text-white flex items-center justify-center font-black text-xl shadow-lg">
+                  {profileForm.full_name?.charAt(0)?.toUpperCase() || 'M'}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="pt-9 px-6 pb-6 space-y-5">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 tracking-tight">Account & Directory Profile</h3>
+                <p className="text-xs text-slate-500">Manage your internal identity, handle tag, and operational specialization.</p>
+              </div>
+
+              <form onSubmit={handleUpdateProfile} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {/* Full Name */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
+                      Full Legal Name
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={profileForm.full_name}
+                      onChange={(e) => setProfileForm({ ...profileForm, full_name: e.target.value })}
+                      placeholder="e.g. Shanya Tripathi"
+                      className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900/10 transition-all font-medium"
+                    />
+                  </div>
+
+                  {/* Tagging Username */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                      <span>Handle Tag</span>
+                      <span className="text-[9px] text-slate-400 font-normal">For @mentions</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-2.5 text-slate-400 font-mono text-xs">@</span>
+                      <input
+                        type="text"
+                        placeholder="handle (e.g. shanya_tripathi)"
+                        value={profileForm.username}
+                        onChange={(e) => setProfileForm({ ...profileForm, username: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
+                        className="w-full bg-slate-50/80 border border-slate-200 rounded-xl pl-8 pr-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900/10 transition-all font-mono font-semibold"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {/* Phone */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
+                      <Phone size={11} className="text-slate-400" /> Contact Number
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="+91 98765 43210"
+                      value={profileForm.phone}
+                      onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                      className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900/10 transition-all font-mono"
+                    />
+                  </div>
+
+                  {/* Skills / Stack */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1">
+                      <Sparkles size={11} className="text-amber-500" /> Core Tech / Skills
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Next.js, Python, Supabase"
+                      value={profileForm.skills}
+                      onChange={(e) => setProfileForm({ ...profileForm, skills: e.target.value })}
+                      className="w-full bg-slate-50/80 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900/10 transition-all font-medium"
+                    />
+                  </div>
+                </div>
+
+                {/* Role Bio */}
+                <div className="space-y-1.5">
+                  <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
+                    <span>Professional Bio / Scope</span>
+                    <span className="text-[9px] text-slate-400 font-normal">Internal Directory</span>
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Brief highlight of your responsibilities, sprint focus, and domain expertise..."
+                    value={profileForm.bio}
+                    onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })}
+                    className="w-full bg-slate-50/80 border border-slate-200 rounded-xl p-3 text-xs text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900/10 transition-all resize-none leading-relaxed"
+                  />
+                </div>
+
+                {/* Footer Buttons */}
+                <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowProfileModal(false)}
+                    className="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={updatingProfile}
+                    className="px-5 py-2.5 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-lg shadow-slate-900/20 hover:shadow-slate-900/30 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {updatingProfile ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Updating Profile...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Save Changes</span>
+                        <span className="text-[11px]">→</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Proof Submission Modal */}
       {submittingProofTask && (
